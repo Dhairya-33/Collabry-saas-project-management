@@ -1,7 +1,8 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
 import { User } from "../models/user.model.js";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";     
 
 
 const generateAccessNRefreshTKN = async (_id) => {
@@ -86,5 +87,34 @@ const loginUser =  asyncHandler ( async (req,res) => {
         accessToken:accessTKN
     })
 })
+const logoutUser = asyncHandler(async (req,res) => {
+    const user = await User.findById(req.user._id); 
+    if(!user){
+        throw new ApiError(404,"user not found")
+    } 
+    user.refreshToken = null;
+    await user.save();
+    res.status(200)
+    .clearCookie("accessToken")
+    .clearCookie("refreshToken")    
+    .json({
+        status:"success",
+        message:"user logged out successfully",
+    })
+})
 
-export {registerUser,loginUser}
+const getCurrentUser = asyncHandler(async (req,res) => {
+  const user = req.user;
+  if(!user){
+    throw new ApiError(404,"user not found")
+  } 
+    res.status(200).json({
+      status:"success",
+      message:"user detailed fetched succesfully",
+      data:user,
+  })
+})
+
+
+
+export {registerUser,loginUser,logoutUser,getCurrentUser};
