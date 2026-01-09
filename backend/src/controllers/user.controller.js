@@ -29,6 +29,35 @@ const generateAccessNRefreshTKN = async (user) => {
   return { accessTKN, refreshTKN };
 }
 
+const refreshAccessToken = asyncHandler(async (req, res) => {
+  const refreshToken = req.cookies?.refreshToken;
+
+  if (!refreshToken) {
+    throw new ApiError(401, "Refresh token missing");
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(refreshToken, process.env.REFRESHTKN_KEY);
+  } catch {
+    throw new ApiError(401, "Invalid or expired refresh token");
+  }
+
+  const user = await User.findById(decoded._id);
+
+  if (!user || user.refreshToken !== refreshToken) {
+    throw new ApiError(401, "Refresh token not recognized");
+  }
+
+  const newAccessToken = await user.generateAccessToken();
+
+  res
+    .status(200)
+    .cookie("accessToken", newAccessToken, cookieOptions)
+    .json({
+      status: "success",
+    });
+});
 
 const registerUser = asyncHandler(async (req,res) => {
     
@@ -183,4 +212,4 @@ const updatePassword = asyncHandler(async (req, res) => {
   
 })
 
-export {registerUser,loginUser,logoutUser,getCurrentUser,updatePassword};
+export {registerUser,loginUser,logoutUser,getCurrentUser,updatePassword,refreshAccessToken};
