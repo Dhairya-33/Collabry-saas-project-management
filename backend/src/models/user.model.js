@@ -67,7 +67,7 @@ userSchema.pre("save", async function (next) {
 
 
 
-userSchema.methods.generateAccessTKN = async function (req,res){
+userSchema.methods.generateAccessToken = async function (req,res){
     return jwt.sign(
         {
             _id : this._id,
@@ -81,7 +81,7 @@ userSchema.methods.generateAccessTKN = async function (req,res){
         }
     )
 }
-userSchema.methods.generateRefreshTKN = async function (req,res){
+userSchema.methods.generateRefreshToken = async function (req,res){
     return jwt.sign(
         {
             _id : this._id,

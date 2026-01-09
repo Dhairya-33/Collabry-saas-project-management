@@ -4,13 +4,32 @@ import { User } from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";     
 
+export const sanitizeUser = (user) => {
+  if (!user) return null;
 
-const generateAccessNRefreshTKN = async (_id) => {
-  const user = await User.findById(_id);
-  const accessTKN = await user.generateAccessTKN();
-  const refreshTKN = await user.generateRefreshTKN();
+  const obj = user.toObject?.({ getters: true }) ?? { ...user };
+
+  delete obj.password;
+  delete obj.refreshToken;
+  delete obj.__v;
+
+  return obj;
+};
+
+const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+};
+
+
+const generateAccessNRefreshTKN = async (user) => {
+  const accessTKN = await user.generateAccessToken();
+  const refreshTKN = await user.generateRefreshToken();
   return { accessTKN, refreshTKN };
 }
+
+
 const registerUser = asyncHandler(async (req,res) => {
     
     const {username,email,password} = req.body;
@@ -46,62 +65,78 @@ const registerUser = asyncHandler(async (req,res) => {
         res.status(201).json({
         status:"success",
         message:"user created successfully",
-        data:user
+        data:sanitizeUser(user),
       })
 })
 
 const loginUser =  asyncHandler ( async (req,res) => {
         
-    const {email,username,password} = req.body
-    if(!email && !username){
+    const {identifier,password} = req.body
+    if(!identifier){
         throw new ApiError(400,"email or username is required")
     }
       if(!password){
     throw new ApiError(400,"password is required")
     }
 
-    const user = await User.findOne(
-        {$or:[{username},{email}]}
-    )
+    const user = await User.findOne({
+      $or: [{ email: identifier }, { username: identifier }]
+    });
     if(!user){
         throw new ApiError(404,"user not found")
     }
     
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await user.verifyPassword(password);
 
     if ( !isMatch) {
       throw new ApiError(401, "invalid credentials");
     }
    
-    const {accessTKN,refreshTKN} = await generateAccessNRefreshTKN(user._id);
+    const {accessTKN,refreshTKN} = await generateAccessNRefreshTKN(user);
     user.refreshToken = refreshTKN;
     await user.save();  
 
     res.status(200)
-    .cookie("accessToken",accessTKN,{httpOnly:true,secure:true})
-    .cookie("refreshToken",refreshTKN,{httpOnly:true,secure:true})
+    .cookie("accessToken",accessTKN,cookieOptions)
+    .cookie("refreshToken",refreshTKN,cookieOptions)
     .json({
         status:"success",
         message:"user logged in successfully",
-        data:user,
-        accessToken:accessTKN
+        data:sanitizeUser(user),
     })
 })
-const logoutUser = asyncHandler(async (req,res) => {
-    const user = await User.findById(req.user._id); 
-    if(!user){
-        throw new ApiError(404,"user not found")
-    } 
-    user.refreshToken = null;
-    await user.save();
-    res.status(200)
-    .clearCookie("accessToken")
-    .clearCookie("refreshToken")    
+const logoutUser = asyncHandler(async (req, res) => {
+  const refreshToken = req.cookies?.refreshToken;
+
+  if (!refreshToken) {
+    return res.status(200).json({
+      status: "success",
+      message: "User already logged out",
+    });
+  }
+
+  const user = await User.findOne({ refreshToken });
+
+  if (!user) {
+    res.clearCookie("accessToken").clearCookie("refreshToken");
+    return res.status(200).json({
+      status: "success",
+      message: "Session already invalidated",
+    });
+  }
+
+  user.refreshToken = null;
+  await user.save();
+  res
+    .status(200)
+    .clearCookie("accessToken", cookieOptions)
+    .clearCookie("refreshToken", cookieOptions)
     .json({
-        status:"success",
-        message:"user logged out successfully",
-    })
-})
+      status: "success",
+      message: "User logged out successfully",
+    });
+});
+
 
 const getCurrentUser = asyncHandler(async (req,res) => {
   const user = req.user;
@@ -111,10 +146,41 @@ const getCurrentUser = asyncHandler(async (req,res) => {
     res.status(200).json({
       status:"success",
       message:"user detailed fetched succesfully",
-      data:user,
+      data:sanitizeUser(user),
   })
 })
 
+const updatePassword = asyncHandler(async (req, res) => {
+  
+  const user = req.user;
+  if(!user){
+    throw new ApiError(404,"user not found")
+  } 
+  const { currentPassword, newPassword } = req.body;
 
+  if(!currentPassword || !newPassword){
+    throw new ApiError(400,"current and new password are required");
+  }
+  
+  const ispasswordcorrect= await user.verifyPassword(currentPassword);
 
-export {registerUser,loginUser,logoutUser,getCurrentUser};
+  if(!ispasswordcorrect){
+    throw new ApiError(401,"your current password is incorrect");
+  }
+  
+  user.password = newPassword;
+  user.refreshToken = null;
+  await user.save();
+
+ res
+  .clearCookie("accessToken", cookieOptions)
+  .clearCookie("refreshToken", cookieOptions)
+  .status(200)
+  .json({
+    status: "success",
+    message: "password updated successfully",
+  });
+  
+})
+
+export {registerUser,loginUser,logoutUser,getCurrentUser,updatePassword};
