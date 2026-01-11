@@ -69,4 +69,43 @@ const joinCompany = asyncHandler(async (req, res) => {
   });
 });
 
-export { createCompany, joinCompany };
+
+export const generateCompanyInvite = asyncHandler(async (req, res) => {
+  const user = req.user;
+
+  if (!user) {
+    throw new ApiError(401, "User not authenticated");
+  }
+
+  if (!user.companyId) {
+    throw new ApiError(400, "User does not belong to any company");
+  }
+
+  const company = await Company.findById(user.companyId);
+  if (!company) {
+    throw new ApiError(404, "Company not found");
+  }
+
+  if (company.createdBy.toString() !== user._id.toString()) {
+    throw new ApiError(403, "Only company owner can generate invite links");
+  }
+
+  const inviteToken = jwt.sign(
+    {
+      companyId: company._id.toString(),
+      type: "company_invite",
+    },
+    process.env.LINK_SECRET,
+    { expiresIn: "24h" }
+  );
+
+  res.status(200).json({
+    status: "success",
+    inviteToken,
+    expiresIn: "24h",
+  });
+});
+
+
+
+export { createCompany, joinCompany, generateCompanyInvite };
