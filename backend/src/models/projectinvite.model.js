@@ -34,4 +34,13 @@ const projectInviteSchema = new Schema({
   timestamps: true
 });
 
+projectInviteSchema.index(
+  { projectId: 1, inviteeId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: "pending" }
+  }
+);
+
+
 export const ProjectInvite = mongoose.model('ProjectInvite', projectInviteSchema);
