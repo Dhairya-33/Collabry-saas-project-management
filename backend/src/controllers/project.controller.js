@@ -68,7 +68,6 @@ const createProject = asyncHandler(async (req,res) => {
 })
 
 
-
 const getallProjects = asyncHandler(async (req,res) => {    
     const user = req.user;
     if (!user) {
@@ -118,9 +117,10 @@ const archiveProject = asyncHandler(async (req,res) => {
         throw new ApiError(403,"Only company owner can archive projects");
     }
 
-    if(!projectId || archived=== undefined){
-        throw new ApiError(400,"Project ID and archived status are required");
-    }
+   if (!projectId || typeof archived !== "boolean") {
+        throw new ApiError(400, "Project ID and valid archived status are required");
+   }
+
    
     const project = await Project.findOneAndUpdate(
         { _id: projectId, companyId: user.companyId },
@@ -424,5 +424,138 @@ const joinProject = asyncHandler(async (req, res) => {
     })
 })
 
+const getProjectEmployees = asyncHandler(async (req,res) => {
+    /*
+    user->auth company role manager/admin
+    projectId -> auth(company)
+    projectMember->(auth role(manager/admin)) , fetch all employee then populate user with credentials
+    */
+   const {projectId} = req.body;
+   const user = req.user;
+   if(!user.companyId){
+    throw new ApiError(400, "User does not belong to any company");
+   }
+   
+   const company  = await Company.findById(user.companyId);
+   if(!company){
+    throw new ApiError(404, "Company not found");
+   }
 
-export { createProject, joinProject , addEmployee, removeEmployee, createProjectInvite , getallProjects,archiveProject,getArchiveProjects};
+   if(!projectId){
+    throw new ApiError(400, "Project ID is required");
+   }
+   const project = await Project.findOne({_id:projectId,companyId:user.companyId})
+   if(!project){
+    throw new ApiError(404, "Project not found");
+   }
+
+   const projectMember = await ProjectMember.findOne({ projectId, userId: user._id });
+    if (!projectMember) throw new ApiError(403, "You are not a member of this project");
+
+    if (!["admin", "manager"].includes(projectMember.role))
+    throw new ApiError(403, "Only admin or manager can view employees");
+
+
+   const projectEmployees = await ProjectMember.find({projectId,role:"employee"})
+   .select("-projectId -companyId -updatedAt")
+   .populate({
+    path:"userId",
+    select:"username email fullname profilePicUrl bio skills phone",
+   })
+
+    res.status(200).json({  
+        status:"success",
+        results:projectEmployees.length,
+        data:projectEmployees
+    }) 
+})
+
+const getemployeeProjects = asyncHandler(async (req,res) => {
+    /**
+      userid input;
+    user-> auth company 
+    project -> userid, role employee,company
+     */
+
+    const user = req.user;
+    if(!user){
+        throw new ApiError(401,"User not authenticated");
+    }
+    if(!user.companyId){
+        throw new ApiError(400,"User does not belong to any company");
+    }
+    const company =  await Company.findById(user.companyId);
+    if(!company){
+        throw new ApiError(404,"Company not found");
+    }
+
+    const Projects = await ProjectMember.find({
+    userId: user._id,
+    companyId:user.companyId,
+    role: "employee"
+    })
+    .populate({
+    path: "projectId",
+    select: "projectName description archived"
+    })
+    .select("projectId -_id");
+
+    const projects = Projects.map((m)=> m.projectId);
+
+    res.status(200).json({
+        status:"success",
+        results:projects.length,
+        data:projects
+    })
+
+})
+
+const getManagerProjects = asyncHandler(async (req,res) => {
+    const user = req.user;
+    if(!user){
+        throw new ApiError(401,"User not authenticated");
+    }
+    if(!user.companyId){
+        throw new ApiError(400,"User does not belong to any company");
+    }
+    const company =  await Company.findById(user.companyId);
+    if(!company){
+        throw new ApiError(404,"Company not found");
+    }
+    const Projects = await ProjectMember.find({
+    userId: user._id,
+    companyId:user.companyId,
+    role: "manager"
+    })
+    .populate({
+    path: "projectId",
+    select: "projectName description archived"
+    })
+    .select("projectId -_id");
+
+    const projects = Projects.map((m)=> m.projectId);
+
+    res.status(200).json({
+        status:"success",
+        results:projects.length,
+        data:projects
+    })
+})
+
+
+export{
+    createProject,
+    createProjectInvite,
+    joinProject,
+
+    addEmployee,
+    removeEmployee,
+
+    getemployeeProjects,
+    getManagerProjects,
+    getallProjects,
+    getProjectEmployees,
+
+    getArchiveProjects,
+    archiveProject
+}
