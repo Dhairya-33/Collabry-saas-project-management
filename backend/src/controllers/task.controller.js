@@ -188,64 +188,154 @@ if (!member) throw new ApiError(403, "Not authorized to delete this task");
 });
 
 const myTasks = asyncHandler(async (req, res) => {
-  const userId = req.user._id;
-  const { projectId } = req.params;
+  const userId = req.user._id;  
+  const projectId = req.params.projectId;
 
-  if (!isValidObjectId(projectId)) {
+  if (!mongoose.isValidObjectId(projectId)) {
     throw new ApiError(400, "Invalid projectId");
   }
+  const project = await Project.findById(projectId);   
+  if (!project) {
+    throw new ApiError(404, "Project not found");
+  } 
 
-  const isMember = await ProjectMember.findOne({
-    projectId,
-    userId,
+  const projectMember = await ProjectMember.findOne({
+    projectId: projectId,
+    userId: userId,
     role: "employee",
   });
+    if (!projectMember) {
+        throw new ApiError(403, "You are not a member of this project");
+    }
 
-  if (!isMember) {
-    throw new ApiError(403, "You are not a member of this project");
-  }
+    const tasks = await Task.aggregate([  
+    { $match: { assignedTo: mongoose.Types.ObjectId(userId), projectId: mongoose.Types.ObjectId(projectId) } },
+    
+    { $addFields: {
+        statusOrder: {
+            $switch: {
+            branches: [
+                { case: { $eq: ["$status", "overdue"] }, then: 0 },
+                { case: { $eq: ["$status", "pending"] }, then: 1 },
+                { case: { $eq: ["$status", "in-progress"] }, then: 2 },
+                { case: { $eq: ["$status", "completed"] }, then: 3 },
+            ],
+            default: 4
+            }
+        }
+        }
+    },
 
-  const tasks = await Task.find({
-    projectId,
-    assignedTo: userId,
-  }).sort({ dueDate: 1 });
+    { $sort: { statusOrder: 1, dueDate: 1, _id: 1 } },
+    { $project: { statusOrder: 0 } }
+    ]);
 
-  res.status(200).json({
+    if (!tasks.length) {
+    return res.status(200).json({
     status: "success",
-    message: "My tasks fetched successfully",
-    data: { tasks },
+    message: "No tasks assigned yet",
+    data: { tasks: [] },
   });
-});
+}
 
+    res.json({
+    status: "success",
+    message: "Tasks retrieved successfully",
+    data: {
+        tasks
+    }
+    })
 
-const managerTasks = asyncHandler(async (req, res) => {
-  const userId = req.user._id;
-  const { projectId } = req.params;
+})
 
-  if (!isValidObjectId(projectId)) {
+const managerTasks = asyncHandler(async (req,res) => {
+    const userId = req.user._id;  
+    const projectId = req.params.projectId;
+
+  if (!mongoose.isValidObjectId(projectId)) {
     throw new ApiError(400, "Invalid projectId");
+  } 
+  const project = await Project.findById(projectId);
+  if (!project) {
+    throw new ApiError(404, "Project not found");
   }
-
-  const isAuthorized = await ProjectMember.findOne({
+  
+  // Check if user is either Manager or Admin in this project
+  const projectMember = await ProjectMember.findOne({
     projectId,
     userId,
-    role: { $in: ["admin", "manager"] },
+    role: { $in: ["manager", "admin"] },
   });
 
-  if (!isAuthorized) {
-    throw new ApiError(403, "You are not authorized to view project tasks");
+  if (!projectMember) {
+    throw new ApiError(403, "You are not authorized to view tasks in this project");
   }
+
 
   const tasks = await Task.find({ projectId })
     .populate("assignedTo", "fullname email username")
     .sort({ dueDate: 1 });
 
-  res.status(200).json({
-    status: "success",
-    message: "Project tasks fetched successfully",
-    data: { tasks },
+  if (!tasks.length) {
+    return res.status(200).json({
+      status: "success",
+      message: "No tasks found for this project",
+      data: [],
+    });
+  }
+
+  const statusPriority = {
+    "overdue": 0,
+    "pending": 1,
+    "in-progress": 2,
+    "completed": 3,
+  };
+
+  // Sort tasks → employee name → status → due date
+  tasks.sort((a, b) => {
+    const nameA = a.assignedTo.fullname.toLowerCase();
+    const nameB = b.assignedTo.fullname.toLowerCase();
+    if (nameA < nameB) return -1;
+    if (nameA > nameB) return 1;
+
+    const statusA = statusPriority[a.status] ?? 99;
+    const statusB = statusPriority[b.status] ?? 99;
+    if (statusA !== statusB) return statusA - statusB;
+
+    return new Date(a.dueDate) - new Date(b.dueDate);
   });
-});
+
+  // Group tasks by employee
+  const grouped = tasks.reduce((acc, task) => {
+    const userId = task.assignedTo._id.toString();
+    if (!acc[userId]) {
+      acc[userId] = {
+        employee: task.assignedTo,
+        tasks: [],
+      };
+    }
+    acc[userId].tasks.push({
+      _id: task._id,
+      taskName: task.taskName,
+      description: task.description,
+      status: task.status,
+      dueDate: task.dueDate,
+      fileUrl: task.fileUrl,
+      submissionUrl: task.submissionUrl,
+    });
+    return acc;
+  }, {});
+
+  // Convert grouped object → array for frontend
+  const result = Object.values(grouped);
+
+
+  res.status(200).json({    
+    status: "success",
+    message: "Tasks retrieved successfully",
+    data: { tasks: result  }  
+  });
+})
 
 
 const respondToTask = asyncHandler(async (req, res) => {
