@@ -3,6 +3,8 @@ import dotenv from "dotenv";
 import connectDB from "./connect.js";
 import userRoutes from "./src/routes/user.routes.js";
 import cookieParser from "cookie-parser";
+import taskRoutes from "./src/routes/task.routes.js";
+
 
 dotenv.config();
 
@@ -16,6 +18,10 @@ app.use(cookieParser());
 ))()
 
 app.use("/api/auth", userRoutes);
+app.use("/api/companies", companyRoutes);
+app.use("/api/tasks", taskRoutes);
+app.use("/api/projects", projectRoutes);
+
 
 app.get("/", (req, res) => {
   res.send("API is running...");
