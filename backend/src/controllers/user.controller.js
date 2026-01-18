@@ -22,7 +22,6 @@ const cookieOptions = {
   sameSite: "lax",
 };
 
-
 const generateAccessNRefreshTKN = async (user) => {
   const accessTKN = await user.generateAccessToken();
   const refreshTKN = await user.generateRefreshToken();
@@ -134,6 +133,7 @@ const loginUser =  asyncHandler ( async (req,res) => {
         data:sanitizeUser(user),
     })
 })
+
 const logoutUser = asyncHandler(async (req, res) => {
   const refreshToken = req.cookies?.refreshToken;
 
@@ -165,7 +165,6 @@ const logoutUser = asyncHandler(async (req, res) => {
       message: "User logged out successfully",
     });
 });
-
 
 const getCurrentUser = asyncHandler(async (req,res) => {
   const user = req.user;
@@ -212,4 +211,62 @@ const updatePassword = asyncHandler(async (req, res) => {
   
 })
 
-export {registerUser,loginUser,logoutUser,getCurrentUser,updatePassword,refreshAccessToken};
+const  completeProfile = asyncHandler(async (req,res) => {
+  const {fullname,phone,bio,skills} = req.body;
+  const profilePictureUrl = req.file.path;
+
+  const user = req.user;
+  if(!user){
+    throw new ApiError(404,"user not found")
+  }
+  if(user.isProfileComplete){
+    throw new ApiError(400,"profile is already completed")
+  }
+  if(!profilePictureUrl || !fullname || !phone || !bio || !skills || skills.length === 0){
+    throw new ApiError(400,"all fields are required to complete your profile")
+  }
+  user.profilePictureUrl = profilePictureUrl;
+  user.phone = phone;
+  user.bio = bio;
+  user.skills = skills;
+  user.isProfileComplete = true;
+  user.fullname = fullname;
+  await user.save();
+
+  res.status(200).json({
+    status:"success",
+    message:"profile completed successfully",
+    data:user 
+  })
+})
+
+const updateProfile = asyncHandler(async (req,res) => {
+  const {phone,bio,skills} = req.body;
+  profilePictureUrl = req.file?.path;
+  
+  const user = req.user;  
+  if(!user){
+    throw new ApiError(404,"user not found")
+  }
+  if(profilePictureUrl) user.profilePictureUrl = profilePictureUrl;
+  if(phone) user.phone = phone;
+  if(bio) user.bio = bio;
+  if(skills && skills.length > 0) user.skills = skills;
+  await user.save();
+  res.status(200).json({
+    status:"success",
+    message:"profile updated successfully",
+    data:user   
+  })
+})
+
+export{
+  loginUser,
+  registerUser,
+  logoutUser,
+  getCurrentUser,
+  updatePassword,
+  completeProfile,
+  updateProfile,
+  refreshAccessToken
+}
