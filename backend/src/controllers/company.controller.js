@@ -16,7 +16,7 @@ const createCompany = asyncHandler(async (req, res) => {
 
   const existingCompany = await Company.findOne({ companyName });
   if (existingCompany) {
-    throw new ApiError(400, "Company already exists");
+    throw new ApiError(400, "Company name already taken");
   }
 
   const company = await Company.create({
@@ -54,8 +54,16 @@ const joinCompany = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
   if (!user) throw new ApiError(404, "User not found");
 
+  if (user.companyId?.toString() === decoded.companyId) {
+    return res.status(200).json({
+      status: "success",
+      message: "User already part of this company",
+      data: { companyId: decoded.companyId }
+    });
+  }
+
   if (user.companyId) {
-    throw new ApiError(400, "User already belongs to a company");
+    throw new ApiError(400, "User already belongs to another company");
   }
 
   user.companyId = decoded.companyId;
@@ -70,11 +78,11 @@ const joinCompany = asyncHandler(async (req, res) => {
 });
 
 
-export const generateCompanyInvite = asyncHandler(async (req, res) => {
+const generateCompanyInvite = asyncHandler(async (req, res) => {
   const user = req.user;
 
   if (!user) {
-    throw new ApiError(401, "User not authenticated");
+    throw new ApiError(401, "Authentication required");
   }
 
   if (!user.companyId) {
