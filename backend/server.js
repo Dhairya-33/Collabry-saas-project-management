@@ -4,6 +4,8 @@ import connectDB from "./connect.js";
 import userRoutes from "./src/routes/user.routes.js";
 import cookieParser from "cookie-parser";
 import taskRoutes from "./src/routes/task.routes.js";
+import companyRoutes from "./src/routes/company.routes.js";
+import projectRoutes from "./src/routes/project.routes.js";
 
 
 dotenv.config();
