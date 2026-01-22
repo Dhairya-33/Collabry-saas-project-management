@@ -43,16 +43,25 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
   }
 
   const user = await User.findById(decoded._id);
+  if (!user) {
+  throw new ApiError(401, "User not found");
+}
 
-  if (!user || user.refreshToken !== refreshToken) {
-    throw new ApiError(401, "Refresh token not recognized");
+  if (user.refreshToken !== refreshToken) {
+    user.refreshToken = null;
+    await user.save();
+    throw new ApiError(401, "Refresh token reused or invalidated");
   }
 
   const newAccessToken = await user.generateAccessToken();
+  const newRefreshToken = await user.generateRefreshToken();
 
+  user.refreshToken = newRefreshToken;
+  await user.save();
   res
     .status(200)
     .cookie("accessToken", newAccessToken, cookieOptions)
+    .cookie("refreshToken", newRefreshToken, cookieOptions)
     .json({
       status: "success",
     });
