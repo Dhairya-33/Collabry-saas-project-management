@@ -33,7 +33,7 @@ router.post("/invite", authorizeRoles("manager", "admin"), createProjectInvite);
 
 router.post("/invite/respond", authorizeRoles("employee"), joinProject);
 
-router.get("/my/employee", authorizeRoles("employee"), getemployeeProgijects);
+router.get("/my/employee", authorizeRoles("employee"), getemployeeProjects);
 router.get("/my/manager", authorizeRoles("manager"), getManagerProjects);
 
 export default router;
