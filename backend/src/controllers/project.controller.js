@@ -4,6 +4,7 @@ import { ApiError } from "../utils/apiError.js";
 import { User } from "../models/user.model.js";
 import { Company } from "../models/company.model.js";
 import { ProjectMember } from "../models/projectMember.model.js";
+import { ProjectInvite } from "../models/projectInvite.model.js";
 
 const createProject = asyncHandler(async (req,res) => {
     const { projectName, description,managerId} = req.body; 
