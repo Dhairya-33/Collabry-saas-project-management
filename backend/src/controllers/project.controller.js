@@ -543,6 +543,113 @@ const getManagerProjects = asyncHandler(async (req,res) => {
     })
 })
 
+const reassignProjectManager = asyncHandler(async (req, res) => {
+  const { projectId, newManagerUserId } = req.body;
+  const actingUser = req.user;
+
+  if (
+    !mongoose.isValidObjectId(projectId) ||
+    !mongoose.isValidObjectId(newManagerUserId)
+  ) {
+    throw new ApiError(400, "Invalid projectId or newManagerUserId");
+  }
+
+  const session = await mongoose.startSession();
+
+  try {
+    await session.withTransaction(async () => {
+      /* ========= Company ========= */
+      const company = await Company.findById(actingUser.companyId).session(session);
+      if (!company) throw new ApiError(404, "Company not found");
+
+      if (company.createdBy.toString() !== actingUser._id.toString()) {
+        throw new ApiError(403, "Only company owner can reassign project manager");
+      }
+
+      /* ========= Project ========= */
+      const project = await Project.findById(projectId).session(session);
+      if (!project) throw new ApiError(404, "Project not found");
+
+      if (project.companyId.toString() !== company._id.toString()) {
+        throw new ApiError(403, "Project does not belong to this company");
+      }
+
+      if (project.archived) {
+        throw new ApiError(400, "Cannot reassign manager of archived project");
+      }
+
+      if (project.managerId?.toString() === newManagerUserId) {
+        throw new ApiError(400, "User is already the project manager");
+      }
+
+      /* ========= New Manager ========= */
+      const newManager = await User.findById(newManagerUserId).session(session);
+      if (!newManager) throw new ApiError(404, "User not found");
+
+      if (newManager.companyId?.toString() !== company._id.toString()) {
+        throw new ApiError(400, "User does not belong to this company");
+      }
+
+      /* ========= Current Manager ========= */
+      if (!project.managerId) {
+        throw new ApiError(
+          409,
+          "Project is in invalid state: missing manager reference"
+        );
+      }
+
+      /* ========= REASSIGN ========= */
+
+      // 1️⃣ Demote current manager explicitly
+      const demotion = await ProjectMember.updateOne(
+        {
+          projectId,
+          userId: project.managerId,
+          role: "manager",
+        },
+        { $set: { role: "employee" } },
+        { session }
+      );
+
+      if (demotion.matchedCount === 0) {
+        throw new ApiError(
+          409,
+          "Project is in invalid state: manager membership missing"
+        );
+      }
+
+      // 2️⃣ Promote new manager (or create membership)
+      await ProjectMember.findOneAndUpdate(
+        { projectId, userId: newManagerUserId },
+        {
+          $set: {
+            role: "manager",
+            companyId: company._id,
+          },
+        },
+        { upsert: true, session, new: true }
+      );
+
+      // 3️⃣ Sync project reference
+      project.managerId = newManagerUserId;
+      await project.save({ session });
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Project manager reassigned successfully",
+      data: {
+        projectId,
+        managerUserId: newManagerUserId,
+      },
+    });
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    throw new ApiError(500, "Failed to reassign project manager", err.message);
+  } finally {
+    session.endSession();
+  }
+});
 
 export{
     createProject,
@@ -552,6 +659,8 @@ export{
     addEmployee,
     removeEmployee,
 
+    reassignProjectManager,
+
     getemployeeProjects,
     getManagerProjects,
     getallProjects,
@@ -559,4 +668,5 @@ export{
 
     getArchiveProjects,
     archiveProject
+
 }

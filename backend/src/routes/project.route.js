@@ -10,7 +10,8 @@ import {
   getallProjects,
   getArchiveProjects,
   archiveProject,
-  getProjectEmployees
+  getProjectEmployees,
+  reassignProjectManager
 } from "../controllers/project.controller.js";
 
 import  verifyJWT  from "../middlewares/jwt.middleware.js";
@@ -35,5 +36,8 @@ router.post("/invite/respond", authorizeRoles("employee"), joinProject);
 
 router.get("/my/employee", authorizeRoles("employee"), getemployeeProjects);
 router.get("/my/manager", authorizeRoles("manager"), getManagerProjects);
+
+router.post("/manager/reassign", authorizeRoles("admin"), reassignProjectManager);
+
 
 export default router;
