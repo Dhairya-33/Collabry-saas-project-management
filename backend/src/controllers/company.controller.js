@@ -115,5 +115,81 @@ const generateCompanyInvite = asyncHandler(async (req, res) => {
 });
 
 
+const removeCompanyMember = asyncHandler(async (req, res) => {
+  const owner = req.user;
+  const { userId } = req.body;
 
-export { createCompany, joinCompany, generateCompanyInvite };
+  if (!userId) {
+    throw new ApiError(400, "userId is required");
+  }
+
+  // 1️⃣ Validate company + owner
+  const company = await Company.findById(owner.companyId);
+  if (!company) {
+    throw new ApiError(404, "Company not found");
+  }
+
+  if (company.createdBy.toString() !== owner._id.toString()) {
+    throw new ApiError(403, "Only company owner can remove members");
+  }
+
+  // 2️⃣ Validate target user
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  if (!user.companyId || user.companyId.toString() !== company._id.toString()) {
+    throw new ApiError(400, "User does not belong to this company");
+  }
+
+  // 3️⃣ Prevent removing company owner
+  if (user._id.toString() === company.createdBy.toString()) {
+    throw new ApiError(400, "Company owner cannot be removed");
+  }
+
+  // 4️⃣ BLOCK if user manages any ACTIVE project
+  const memberships = await ProjectMember.find({
+    companyId: company._id,
+    userId: user._id,
+    role: { $in: ["admin", "manager"] },
+  }).populate("projectId", "archived");
+
+  const activeProjects = memberships.filter(
+    (m) => m.projectId && m.projectId.archived === false
+  );
+
+  if (activeProjects.length > 0) {
+    throw new ApiError(
+      400,
+      "User is manager/admin of active projects. Reassign before removal.",
+      {
+        projects: activeProjects.map((m) => m.projectId._id),
+      }
+    );
+  }
+
+  // 5️⃣ Remove from ALL project memberships (active + archived)
+  await ProjectMember.deleteMany({
+    companyId: company._id,
+    userId: user._id,
+  });
+
+  // 6️⃣ Remove all pending project invites
+  await ProjectInvite.deleteMany({
+    companyId: company._id,
+    inviteeId: user._id,
+  });
+
+  // 7️⃣ Detach user from company
+  user.companyId = null;
+  await user.save();
+
+  res.status(200).json({
+    status: "success",
+    message: "User removed from company successfully",
+  });
+});
+
+
+export { createCompany, joinCompany, generateCompanyInvite, removeCompanyMember };
