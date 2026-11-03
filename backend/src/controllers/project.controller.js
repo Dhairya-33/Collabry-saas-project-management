@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { Project } from "../models/project.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
@@ -44,24 +45,30 @@ const createProject = asyncHandler(async (req,res) => {
     if (!manager) {
         throw new ApiError(404, "Manager not found");
     }       
-    if (manager.companyId.toString() !== user.companyId.toString()) {
+    if (manager.companyId?.toString() !== user.companyId.toString()) {
         throw new ApiError(400, "Manager does not belong to your company");
     } 
     
-    const project = await Project.create({ projectName,companyId:user.companyId ,managerId,description});
-    if (!project) {     
-        throw new ApiError(500, "Failed to create project");
+    const session = await mongoose.startSession();
+    let project;
+    try {
+        await session.withTransaction(async () => {
+            [project] = await Project.create(
+                [{ projectName, companyId: user.companyId, managerId, description }],
+                { session }
+            );
+            const members = [
+                { companyId: user.companyId, projectId: project._id, userId: user._id, role: "admin" },
+            ];
+            if (managerId.toString() !== user._id.toString()) {
+                members.push({ companyId: user.companyId, projectId: project._id, userId: managerId, role: "manager" });
+            }
+            await ProjectMember.create(members, { session, ordered: true });
+        });
+    } finally {
+        await session.endSession();
     }
 
-    const projectAdmin = await ProjectMember.create({companyId:user.companyId,projectId:project._id,userId:user._id,role:"admin"})
-    if(!projectAdmin){
-        throw new ApiError(500,"Failed to assign admin to the project");
-    }
-    const projectManager = await ProjectMember.create({companyId:user.companyId,projectId:project._id,userId:managerId,role:"manager"})
-    if(!projectManager){
-        throw new ApiError(500,"Failed to assign manager to the project");
-    }
-     
     res.status(201).json({
         status: "success",
         message: "Project created successfully",
@@ -110,7 +117,7 @@ const addEmployee = asyncHandler(async (req,res) => {
     if(!employee){
         throw new ApiError(404,"Employee not found");
     }
-    if(employee.companyId.toString() !== user.companyId.toString()){
+    if(employee.companyId?.toString() !== user.companyId.toString()){
         throw new ApiError(400,"Employee does not belong to your company");
     }
  
@@ -184,7 +191,7 @@ const removeEmployee = asyncHandler(async (req,res) => {
         throw new ApiError(404,"Employee not found");
     }
     
-    if(employee.companyId.toString()!== user.companyId.toString()){
+    if(employee.companyId?.toString()!== user.companyId.toString()){
         throw new ApiError(400,"Employee does not belong to your company");
     }
 
@@ -244,13 +251,18 @@ const createProjectInvite = asyncHandler(async (req, res) => {
   const invitee = await User.findById(inviteeId);
   if (!invitee) throw new ApiError(404, "Invitee not found");
 
-  if (invitee.companyId.toString() !== user.companyId.toString()) {
+  if (invitee.companyId?.toString() !== user.companyId.toString()) {
     throw new ApiError(400, "Invitee does not belong to your company");
   }
 
-  const projectInviteExist = await ProjectInvite.findOne({ projectId, inviteeId });
+  const projectInviteExist = await ProjectInvite.findOne({ projectId, inviteeId, status: "pending" });
   if (projectInviteExist) {
     throw new ApiError(400, "Invite already sent to this user for this project");
+  }
+
+  const alreadyMember = await ProjectMember.findOne({ projectId, userId: inviteeId });
+  if (alreadyMember) {
+    throw new ApiError(400, "User is already a member of this project");
   }
 
   const projectInvite = await ProjectInvite.create({
