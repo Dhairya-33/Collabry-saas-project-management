@@ -10,7 +10,7 @@ const authorizeProjectRoles = (...allowedRoles) => {
     try {
       const user = req.user;
       const projectId =
-        req.params.projectId || req.body.projectId || req.query.projectId;
+        req.params.projectId || req.body?.projectId || req.query.projectId;
 
       if (!user || !projectId) {
         throw new ApiError(400, "User or projectId missing in request");

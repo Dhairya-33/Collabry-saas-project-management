@@ -70,7 +70,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 });
 
 const registerUser = asyncHandler(async (req, res) => {
-  const { username, email, password } = req.body;
+  const { username, email, password } = req.body ?? {};
 
   if (![username, email, password].every(isNonEmptyString)) {
     throw new ApiError(400, "All fields are required");
@@ -111,7 +111,7 @@ const registerUser = asyncHandler(async (req, res) => {
 });
 
 const loginUser = asyncHandler(async (req, res) => {
-  const { identifier, password } = req.body;
+  const { identifier, password } = req.body ?? {};
 
   // typeof checks block NoSQL operator injection like { "$ne": "" }
   if (!isNonEmptyString(identifier)) throw new ApiError(400, "email or username is required");
@@ -172,7 +172,7 @@ const updatePassword = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
   if (!user) throw new ApiError(404, "user not found");
 
-  const { currentPassword, newPassword } = req.body;
+  const { currentPassword, newPassword } = req.body ?? {};
   if (!isNonEmptyString(currentPassword) || !isNonEmptyString(newPassword)) {
     throw new ApiError(400, "current and new password are required");
   }
@@ -198,8 +198,8 @@ const completeProfile = asyncHandler(async (req, res) => {
   if (!user) throw new ApiError(404, "user not found");
   if (user.isProfileComplete) throw new ApiError(400, "profile is already completed");
 
-  const { fullname, phone, bio } = req.body;
-  const skills = parseSkills(req.body.skills);
+  const { fullname, phone, bio } = req.body ?? {};
+  const skills = parseSkills(req.body?.skills);
   const profilePictureUrl = req.file?.path;
 
   if (
@@ -231,8 +231,8 @@ const updateProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
   if (!user) throw new ApiError(404, "user not found");
 
-  const { fullname, phone, bio } = req.body;
-  const skills = parseSkills(req.body.skills);
+  const { fullname, phone, bio } = req.body ?? {};
+  const skills = parseSkills(req.body?.skills);
   const profilePictureUrl = req.file?.path;
 
   if (profilePictureUrl) user.profilePictureUrl = profilePictureUrl;
