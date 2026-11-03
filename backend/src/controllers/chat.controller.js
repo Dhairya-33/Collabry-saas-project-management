@@ -107,7 +107,11 @@ const deleteMessage = asyncHandler(async (req, res) => {
   // ---------- COMPANY ROOM ----------
   if (roomId.startsWith("company_")) {
     const company = await Company.findById(req.user.companyId);
-    if (!company || company.createdBy.toString() !== userId.toString()) {
+    if (
+      !company ||
+      roomId !== `company_${company._id}` ||
+      company.createdBy.toString() !== userId.toString()
+    ) {
       throw new ApiError(
         403,
         "Only admin can delete messages in company general chat"
