@@ -13,7 +13,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const createCompany = asyncHandler(async (req, res) => {
-  const { companyName, description } = req.body;
+  const { companyName, description } = req.body ?? {};
 
   if (!companyName?.trim()) {
     throw new ApiError(400, "Company name is required");
@@ -44,7 +44,7 @@ const createCompany = asyncHandler(async (req, res) => {
 
 
 const joinCompany = asyncHandler(async (req, res) => {
-  const { token } = req.body;
+  const { token } = req.body ?? {};
   if (!token) throw new ApiError(400, "Invite token is required");
 
   let decoded;
@@ -122,7 +122,7 @@ const generateCompanyInvite = asyncHandler(async (req, res) => {
 
 const removeCompanyMember = asyncHandler(async (req, res) => {
   const owner = req.user;
-  const { userId } = req.body;
+  const { userId } = req.body ?? {};
 
   if (!userId) {
     throw new ApiError(400, "userId is required");
@@ -198,7 +198,7 @@ const removeCompanyMember = asyncHandler(async (req, res) => {
 
 
 const reassignProjectManager = asyncHandler(async (req, res) => {
-  const { projectId, newManagerUserId } = req.body;
+  const { projectId, newManagerUserId } = req.body ?? {};
   const actingUser = req.user;
 
   if (
@@ -255,34 +255,42 @@ const reassignProjectManager = asyncHandler(async (req, res) => {
       /* ========= REASSIGN ========= */
 
       // 1ï¸âƒ£ Demote current manager explicitly
-      const demotion = await ProjectMember.updateOne(
-        {
-          projectId,
-          userId: project.managerId,
-          role: "manager",
-        },
-        { $set: { role: "employee" } },
-        { session }
-      );
+      const oldMembership = await ProjectMember.findOne({
+        projectId,
+        userId: project.managerId,
+      }).session(session);
 
-      if (demotion.matchedCount === 0) {
+      if (!oldMembership) {
         throw new ApiError(
           409,
           "Project is in invalid state: manager membership missing"
         );
       }
 
-      // 2ï¸âƒ£ Promote new manager (or create membership)
-      await ProjectMember.findOneAndUpdate(
-        { projectId, userId: newManagerUserId },
-        {
-          $set: {
-            role: "manager",
-            companyId: company._id,
-          },
-        },
-        { upsert: true, session, new: true }
-      );
+      // owner-as-manager only has an "admin" row: leave it untouched
+      if (oldMembership.role === "manager") {
+        await ProjectMember.updateOne(
+          { _id: oldMembership._id },
+          { $set: { role: "employee" } },
+          { session }
+        );
+      }
+
+      // promote the new manager, but never overwrite an "admin" row
+      const newMembership = await ProjectMember.findOne({
+        projectId,
+        userId: newManagerUserId,
+      }).session(session);
+
+      if (!newMembership) {
+        await ProjectMember.create(
+          [{ projectId, userId: newManagerUserId, companyId: company._id, role: "manager" }],
+          { session }
+        );
+      } else if (newMembership.role === "employee") {
+        newMembership.role = "manager";
+        await newMembership.save({ session });
+      }
 
       // 3ï¸âƒ£ Sync project reference
       project.managerId = newManagerUserId;
@@ -351,11 +359,10 @@ const getOverview = asyncHandler(async (req, res) => {
 
   /* ================= MANAGER PROJECTS ================= */
 
-  const managingProjectIds = await ProjectMember.find({
-    userId: user._id,
+  const managingProjectIds = await Project.distinct("_id", {
     companyId: company._id,
-    role: "manager",
-  }).distinct("projectId");
+    managerId: user._id,
+  });
 
   const isManager = managingProjectIds.length > 0;
 
