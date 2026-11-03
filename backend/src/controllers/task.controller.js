@@ -19,9 +19,13 @@ const assignTask = asyncHandler(async (req, res) => {
   ) {
     throw new ApiError(400, "Invalid projectId or empId");
   }
-  
-  const projectExists = await Project.exists({ _id: projectId });
-  if (!projectExists) throw new ApiError(404, "Project not found");
+
+  const project = await Project.findById(projectId).select("companyId");
+  if (!project) throw new ApiError(404, "Project not found");
+
+  if (project.companyId.toString() !== req.user.companyId.toString()) {
+    throw new ApiError(403, "Unauthorized access to this project");
+  }
 
   const managerId = req.user._id;
 
@@ -32,7 +36,7 @@ const assignTask = asyncHandler(async (req, res) => {
   });
 
   if (!person) {
-    throw new ApiError(403, "You are not authorized to assign tasks in this project");
+    throw new ApiError(403, "Not authorized to assign tasks");
   }
 
   const employee = await ProjectMember.findOne({
@@ -40,12 +44,12 @@ const assignTask = asyncHandler(async (req, res) => {
     userId: empId,
     role: "employee",
   });
+
   if (!employee) {
-    throw new ApiError(404, "Employee not found in this project");
+    throw new ApiError(404, "Employee not in this project");
   }
 
-  const fileUrl = req.file ? req.file.path : undefined;
-
+  const fileUrl = req.file?.path;
 
   const task = await Task.create({
     taskName: taskName.trim(),
@@ -54,24 +58,15 @@ const assignTask = asyncHandler(async (req, res) => {
     assignedBy: managerId,
     dueDate,
     projectId,
+    companyId: project.companyId, // âœ… FIXED
     status: "pending",
     fileUrl,
   });
 
-  if (!task) {
-    throw new ApiError(500, "Task creation failed, please try again");
-  }
-
   res.status(201).json({
     status: "success",
     message: "Task assigned successfully",
-    data: {
-      taskId: task._id,
-      taskName: task.taskName,
-      assignedTo: task.assignedTo,
-      dueDate: task.dueDate,
-      status: task.status,
-    },
+    data: task,
   });
 });
 
@@ -209,7 +204,7 @@ const myTasks = asyncHandler(async (req, res) => {
     }
 
     const tasks = await Task.aggregate([  
-    { $match: { assignedTo: mongoose.Types.ObjectId(userId), projectId: mongoose.Types.ObjectId(projectId) } },
+    { $match: { assignedTo: new mongoose.Types.ObjectId(userId), projectId: new mongoose.Types.ObjectId(projectId) } },
     
     { $addFields: {
         statusOrder: {
@@ -291,7 +286,7 @@ const managerTasks = asyncHandler(async (req,res) => {
     "completed": 3,
   };
 
-  // Sort tasks → employee name → status → due date
+  // Sort tasks â†’ employee name â†’ status â†’ due date
   tasks.sort((a, b) => {
     const nameA = a.assignedTo.fullname.toLowerCase();
     const nameB = b.assignedTo.fullname.toLowerCase();
@@ -326,7 +321,7 @@ const managerTasks = asyncHandler(async (req,res) => {
     return acc;
   }, {});
 
-  // Convert grouped object → array for frontend
+  // Convert grouped object â†’ array for frontend
   const result = Object.values(grouped);
 
 
@@ -336,7 +331,6 @@ const managerTasks = asyncHandler(async (req,res) => {
     data: { tasks: result  }  
   });
 })
-
 
 const respondToTask = asyncHandler(async (req, res) => {
   const user = req.user;
