@@ -1,10 +1,10 @@
-import { Project } from "../models/project.model.js";
+﻿import { Project } from "../models/project.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
 import { User } from "../models/user.model.js";
 import { Company } from "../models/company.model.js";
-import { ProjectMember } from "../models/projectMember.model.js";
 import { ProjectInvite } from "../models/projectInvite.model.js";
+import { ProjectMember } from "../models/projectMember.model.js";
 
 const createProject = asyncHandler(async (req,res) => {
     const { projectName, description,managerId} = req.body; 
@@ -36,6 +36,7 @@ const createProject = asyncHandler(async (req,res) => {
         throw new ApiError(400, "Project already exists");
     } 
 
+     //assigning manager 
     if(!managerId){
         throw new ApiError(400,"Manager ID is required");
      }
@@ -67,105 +68,6 @@ const createProject = asyncHandler(async (req,res) => {
         data: project
     });
 })
-
-
-const getallProjects = asyncHandler(async (req,res) => {    
-    const user = req.user;
-    if (!user) {
-        throw new ApiError(401, "User not authenticated");
-    }   
-    if (!user.companyId) {
-        throw new ApiError(400, "User does not belong to any company");
-    }   
-    const company =  await Company.findById(user.companyId);
-    if(!company){
-        throw new ApiError(404,"Company not found");
-    }   
-    
-    if(company.createdBy.toString() !== user._id.toString()){
-        throw new ApiError(403,"Only company owner can view all projects");
-    }   
-
-    const projects = await Project.find({companyId:user.companyId,archived:false});    
-    res.status(200).json({
-        status:"success",
-        results:projects.length,
-        data:projects
-    })  
-})
-
-
-const archiveProject = asyncHandler(async (req,res) => {
-    /*
-    user-> auth , company, role
-    projectid-> exist ,company,archive , 
-    */
-    const {projectId,archived} = req.body;
-    const user = req.user;
-    if(!user){
-        throw new ApiError(401,"User not authenticated");
-    }
-
-    if(!user.companyId){
-        throw new ApiError(400,"User does not belong to any company");
-    }
-    const company = await Company.findById(user.companyId)
-    if(!company){
-        throw new ApiError(404,"Company not found");
-    }
-
-    if(user._id.toString()!== company.createdBy.toString()){
-        throw new ApiError(403,"Only company owner can archive projects");
-    }
-
-   if (!projectId || typeof archived !== "boolean") {
-        throw new ApiError(400, "Project ID and valid archived status are required");
-   }
-
-   
-    const project = await Project.findOneAndUpdate(
-        { _id: projectId, companyId: user.companyId },
-        { archived: archived },
-        { new: true }
-    );
-    if(!project){
-        throw new ApiError(404,"Project not found or does not belong to your company");
-    }
-
-    res.status(200).json({
-        status:"success",
-        message:"Project archived successfully",
-        data:project
-    })
-})
-
-
-const getArchiveProjects = asyncHandler(async (req,res) => {    
-    const user = req.user;
-    if (!user) {
-        throw new ApiError(401, "User not authenticated");
-    }   
-    if (!user.companyId) {
-        throw new ApiError(400, "User does not belong to any company");
-    }   
-
-    const company =  await Company.findById(user.companyId);
-    if(!company){
-        throw new ApiError(404,"Company not found");
-    }   
-
-    if(company.createdBy.toString() !== user._id.toString()){
-        throw new ApiError(403,"Only company owner can view all projects");
-    }   
-
-    const projects = await Project.find({companyId:user.companyId,archived:true});    
-    res.status(200).json({
-        status:"success",
-        results:projects.length,
-        data:projects
-    })  
-})
-
 
 const addEmployee = asyncHandler(async (req,res) => {
 
@@ -216,10 +118,12 @@ const addEmployee = asyncHandler(async (req,res) => {
     if(isAlreadyMember){
         throw new ApiError(400,"Employee is already a member of this project");
     }
-    const newMember = await ProjectMember.create({projectId,userId:empId,role:"employee",companyId:user.companyId});
-    if(!newMember){
-        throw new ApiError(500,"Failed to add employee to the project");
-    }
+    const newMember = await ProjectMember.create({
+    projectId,
+    userId: empId,
+    role: "employee",
+    companyId: project.companyId, // âœ… FIXED
+    });
 
     res.status(200).json({
         status:"success",
@@ -543,123 +447,133 @@ const getManagerProjects = asyncHandler(async (req,res) => {
     })
 })
 
-const reassignProjectManager = asyncHandler(async (req, res) => {
-  const { projectId, newManagerUserId } = req.body;
-  const actingUser = req.user;
+const getallProjects = asyncHandler(async (req,res) => {    
+    const user = req.user;
+    if (!user) {
+        throw new ApiError(401, "User not authenticated");
+    }   
+    if (!user.companyId) {
+        throw new ApiError(400, "User does not belong to any company");
+    }   
+    const company =  await Company.findById(user.companyId);
+    if(!company){
+        throw new ApiError(404,"Company not found");
+    }   
+    
+    if(company.createdBy.toString() !== user._id.toString()){
+        throw new ApiError(403,"Only company owner can view all projects");
+    }   
 
-  if (
-    !mongoose.isValidObjectId(projectId) ||
-    !mongoose.isValidObjectId(newManagerUserId)
-  ) {
-    throw new ApiError(400, "Invalid projectId or newManagerUserId");
-  }
+    const projects = await Project.find({companyId:user.companyId,archived:false});    
+    res.status(200).json({
+        status:"success",
+        results:projects.length,
+        data:projects
+    })  
+})
 
-  const session = await mongoose.startSession();
+const archiveProject = asyncHandler(async (req,res) => {
+    /*
+    user-> auth , company, role
+    projectid-> exist ,company,archive , 
+    */
+    const {projectId,archived} = req.body;
+    const user = req.user;
+    if(!user){
+        throw new ApiError(401,"User not authenticated");
+    }
 
-  try {
-    await session.withTransaction(async () => {
-      /* ========= Company ========= */
-      const company = await Company.findById(actingUser.companyId).session(session);
-      if (!company) throw new ApiError(404, "Company not found");
+    if(!user.companyId){
+        throw new ApiError(400,"User does not belong to any company");
+    }
+    const company = await Company.findById(user.companyId)
+    if(!company){
+        throw new ApiError(404,"Company not found");
+    }
 
-      if (company.createdBy.toString() !== actingUser._id.toString()) {
-        throw new ApiError(403, "Only company owner can reassign project manager");
-      }
+    if(user._id.toString()!== company.createdBy.toString()){
+        throw new ApiError(403,"Only company owner can archive projects");
+    }
 
-      /* ========= Project ========= */
-      const project = await Project.findById(projectId).session(session);
-      if (!project) throw new ApiError(404, "Project not found");
+    if (!projectId || typeof archived !== "boolean") {
+        throw new ApiError(400, "Project ID and valid archived status are required");
+        }
 
-      if (project.companyId.toString() !== company._id.toString()) {
-        throw new ApiError(403, "Project does not belong to this company");
-      }
-
-      if (project.archived) {
-        throw new ApiError(400, "Cannot reassign manager of archived project");
-      }
-
-      if (project.managerId?.toString() === newManagerUserId) {
-        throw new ApiError(400, "User is already the project manager");
-      }
-
-      /* ========= New Manager ========= */
-      const newManager = await User.findById(newManagerUserId).session(session);
-      if (!newManager) throw new ApiError(404, "User not found");
-
-      if (newManager.companyId?.toString() !== company._id.toString()) {
-        throw new ApiError(400, "User does not belong to this company");
-      }
-
-      /* ========= Current Manager ========= */
-      if (!project.managerId) {
-        throw new ApiError(
-          409,
-          "Project is in invalid state: missing manager reference"
-        );
-      }
-
-      /* ========= REASSIGN ========= */
-
-      // 1️⃣ Demote current manager explicitly
-      const demotion = await ProjectMember.updateOne(
-        {
-          projectId,
-          userId: project.managerId,
-          role: "manager",
-        },
-        { $set: { role: "employee" } },
-        { session }
-      );
-
-      if (demotion.matchedCount === 0) {
-        throw new ApiError(
-          409,
-          "Project is in invalid state: manager membership missing"
-        );
-      }
-
-      // 2️⃣ Promote new manager (or create membership)
-      await ProjectMember.findOneAndUpdate(
-        { projectId, userId: newManagerUserId },
-        {
-          $set: {
-            role: "manager",
-            companyId: company._id,
-          },
-        },
-        { upsert: true, session, new: true }
-      );
-
-      // 3️⃣ Sync project reference
-      project.managerId = newManagerUserId;
-      await project.save({ session });
-    });
+   
+    const project = await Project.findOneAndUpdate(
+        { _id: projectId, companyId: user.companyId },
+        { archived: archived },
+        { new: true }
+    );
+    if(!project){
+        throw new ApiError(404,"Project not found or does not belong to your company");
+    }
 
     res.status(200).json({
-      success: true,
-      message: "Project manager reassigned successfully",
-      data: {
-        projectId,
-        managerUserId: newManagerUserId,
-      },
-    });
-  } catch (err) {
-    if (err instanceof ApiError) throw err;
-    throw new ApiError(500, "Failed to reassign project manager", err.message);
-  } finally {
-    session.endSession();
-  }
+        status:"success",
+        message:"Project archived successfully",
+        data:project
+    })
+})
+
+const getArchiveProjects = asyncHandler(async (req,res) => {    
+    const user = req.user;
+    if (!user) {
+        throw new ApiError(401, "User not authenticated");
+    }   
+    if (!user.companyId) {
+        throw new ApiError(400, "User does not belong to any company");
+    }   
+
+    const company =  await Company.findById(user.companyId);
+    if(!company){
+        throw new ApiError(404,"Company not found");
+    }   
+
+    if(company.createdBy.toString() !== user._id.toString()){
+        throw new ApiError(403,"Only company owner can view all projects");
+    }   
+
+    const projects = await Project.find({companyId:user.companyId,archived:true});    
+    res.status(200).json({
+        status:"success",
+        results:projects.length,
+        data:projects
+    })  
+})
+
+const getMyProjectInvites = asyncHandler(async (req, res) => {
+  const user = req.user;
+
+  const invites = await ProjectInvite.find({
+    inviteeId: user._id,
+    status: "pending",
+  })
+    .populate("projectId", "name archived")
+    .populate("invitedBy", "fullName username profilePictureUrl")
+    .sort({ createdAt: -1 });
+
+  res.status(200).json({
+    success: true,
+    data: {
+      invites,
+    },
+  });
 });
 
-export{
-    createProject,
-    createProjectInvite,
-    joinProject,
 
+
+
+    
+export { 
+    createProject,
     addEmployee,
     removeEmployee,
 
-    reassignProjectManager,
+    createProjectInvite,
+    getMyProjectInvites,
+    joinProject,
+
 
     getemployeeProjects,
     getManagerProjects,
@@ -668,5 +582,4 @@ export{
 
     getArchiveProjects,
     archiveProject
-
-}
+ };

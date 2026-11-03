@@ -41,6 +41,7 @@ projectInviteSchema.index(
     partialFilterExpression: { status: "pending" }
   }
 );
+projectInviteSchema.index({ inviteeId: 1, status: 1 });
 
 
 export const ProjectInvite = mongoose.model('ProjectInvite', projectInviteSchema);
