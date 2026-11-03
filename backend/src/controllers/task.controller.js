@@ -108,7 +108,10 @@ const editTask = asyncHandler(async (req, res) => {
 
   if (taskName?.trim()) task.taskName = taskName.trim();
   if (description?.trim()) task.description = description.trim();
-  if (dueDate) task.dueDate = dueDate;
+  if (dueDate) {
+    task.dueDate = dueDate;
+    if (task.status === "overdue" && new Date(dueDate) > new Date()) task.status = "pending";
+  }
 
   if (status) {
     const validStatuses = ["pending", "in-progress", "completed"];
@@ -288,8 +291,8 @@ const managerTasks = asyncHandler(async (req,res) => {
 
   // Sort tasks â†’ employee name â†’ status â†’ due date
   tasks.sort((a, b) => {
-    const nameA = a.assignedTo.fullname.toLowerCase();
-    const nameB = b.assignedTo.fullname.toLowerCase();
+    const nameA = (a.assignedTo?.fullname || a.assignedTo?.username || "").toLowerCase();
+    const nameB = (b.assignedTo?.fullname || b.assignedTo?.username || "").toLowerCase();
     if (nameA < nameB) return -1;
     if (nameA > nameB) return 1;
 
@@ -400,6 +403,9 @@ const getSingleTask = asyncHandler(async (req, res) => {
     .populate("assignedBy", "fullname email");
 
   if (!task) throw new ApiError(404, "Task not found");
+
+  const member = await ProjectMember.findOne({ projectId: task.projectId, userId: req.user._id });
+  if (!member) throw new ApiError(403, "Not a member of this project");
 
   res.status(200).json({ status: "success", data: task });
 });
