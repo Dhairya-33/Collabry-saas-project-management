@@ -11,6 +11,7 @@ import taskRoutes from "./src/routes/task.route.js";
 import chatRoutes from "./src/routes/chat.route.js";
 import connectDB from "./connect.js";
 import errorHandler from "./src/middlewares/errorhandler.middleware.js";
+import { updateOverdueTasks } from "./src/cron/updateOverdueTasks.js";
 
 
 dotenv.config();
@@ -41,6 +42,8 @@ const fun = async () => (
 fun();
 
 
+updateOverdueTasks();
+
 const server = http.createServer(app);
 
 initSocket(server); 
@@ -54,5 +57,5 @@ app.use(errorHandler)
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(` Server running on port ${PORT}`);
+  console.log(`ðŸš€ Server running on port ${PORT}`);
 });
