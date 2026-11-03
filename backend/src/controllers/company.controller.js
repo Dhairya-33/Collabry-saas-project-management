@@ -19,6 +19,7 @@ const createCompany = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Company name is required");
   }
 
+  if (req.user.companyId) throw new ApiError(400, "You already belong to a company");
   const existingCompany = await Company.findOne({ companyName });
   if (existingCompany) {
     throw new ApiError(400, "Company name already taken");
@@ -72,7 +73,6 @@ const joinCompany = asyncHandler(async (req, res) => {
   }
 
   user.companyId = decoded.companyId;
-  user.role = "employee";
   await user.save();
 
   res.status(200).json({
