@@ -12,7 +12,7 @@ const verifyJWT = asyncHandler(async (req,res,next) => {
     try {
         const accessTKN = req.cookies?.accessToken 
         if(!accessTKN){
-            throw new ApiError(401,"you are not logged in")
+            throw new ApiError(401,"you are not logged in.")
         }
         
         const decodedTKN = jwt.verify(accessTKN,process.env.ACCESSTKN_KEY)

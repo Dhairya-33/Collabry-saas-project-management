@@ -1,6 +1,10 @@
 import { ProjectMember } from "../models/projectMember.model.js";
 import { ApiError } from "../utils/apiError.js";
 
+/**
+ * Check if the user has one of the allowed roles within a given project.
+ * Must be used on routes that have :projectId in params or body.
+ */
 const authorizeProjectRoles = (...allowedRoles) => {
   return async (req, res, next) => {
     try {
