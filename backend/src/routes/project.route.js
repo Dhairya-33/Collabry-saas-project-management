@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import {
   createProject,
   addEmployee,
@@ -11,6 +11,7 @@ import {
   getArchiveProjects,
   archiveProject,
   getProjectEmployees,
+  getProjectById,
   getMyProjectInvites
 } from "../controllers/project.controller.js";
 import verifyJWT from "../middlewares/jwt.middleware.js";
@@ -33,5 +34,8 @@ router.get("/invite/my", getMyProjectInvites);
 
 router.get("/my/employee", getemployeeProjects);
 router.get("/my/manager", getManagerProjects);
+
+// keep this LAST so it does not shadow /all, /archived, /my/*
+router.get("/:projectId", getProjectById);
 
 export default router;

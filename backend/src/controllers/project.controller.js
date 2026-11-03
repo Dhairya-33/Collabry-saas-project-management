@@ -8,7 +8,7 @@ import { ProjectInvite } from "../models/projectInvite.model.js";
 import { ProjectMember } from "../models/projectMember.model.js";
 
 const createProject = asyncHandler(async (req,res) => {
-    const { projectName, description,managerId} = req.body; 
+    const { projectName, description,managerId} = req.body ?? {}; 
 
     const user = req.user;
     if (!user) {
@@ -83,7 +83,7 @@ const addEmployee = asyncHandler(async (req,res) => {
     emp id -> auth , company , project,
 
     */
-    const {empId,projectId} = req.body;
+    const {empId,projectId} = req.body ?? {};
     const user = req.user;
 
     if(!user){
@@ -152,7 +152,7 @@ const removeEmployee = asyncHandler(async (req,res) => {
     send mail to that user you are removed
     */
 
-    const {projectId, empId} = req.body;
+    const {projectId, empId} = req.body ?? {};
 
     const user = req.user;
 
@@ -196,13 +196,14 @@ const removeEmployee = asyncHandler(async (req,res) => {
     }
 
     const projectMember = await ProjectMember.deleteOne({
+    role: "employee",
     companyId: company._id,
     projectId,
     userId: empId,
     })
 
     if (projectMember.deletedCount === 0) {
-    throw new ApiError(500, "Failed to remove employee from the project");
+    throw new ApiError(404, "User is not an employee member of this project");
     }
 
 
@@ -215,7 +216,7 @@ const removeEmployee = asyncHandler(async (req,res) => {
 })
 
 const createProjectInvite = asyncHandler(async (req, res) => {
-  const { inviteeId, projectId } = req.body;
+  const { inviteeId, projectId } = req.body ?? {};
   const user = req.user;
 
   if (!user) throw new ApiError(401, "User not authenticated");
@@ -289,7 +290,7 @@ const joinProject = asyncHandler(async (req, res) => {
     create project member 
     }
     */
-    const {projectInviteId,status,reason} = req.body;
+    const {projectInviteId,status,reason} = req.body ?? {};
     const user = req.user;
     if(!user){
         throw new ApiError(401,"User not authenticated");
@@ -347,7 +348,7 @@ const getProjectEmployees = asyncHandler(async (req,res) => {
     projectId -> auth(company)
     projectMember->(auth role(manager/admin)) , fetch all employee then populate user with credentials
     */
-   const {projectId} = req.body;
+   const {projectId} = req.body ?? {};
    const user = req.user;
    if(!user.companyId){
     throw new ApiError(400, "User does not belong to any company");
@@ -439,18 +440,8 @@ const getManagerProjects = asyncHandler(async (req,res) => {
     if(!company){
         throw new ApiError(404,"Company not found");
     }
-    const Projects = await ProjectMember.find({
-    userId: user._id,
-    companyId:user.companyId,
-    role: "manager"
-    })
-    .populate({
-    path: "projectId",
-    select: "projectName description archived"
-    })
-    .select("projectId -_id");
-
-    const projects = Projects.map((m)=> m.projectId);
+    const projects = await Project.find({ companyId: user.companyId, managerId: user._id })
+        .select("projectName description archived");
 
     res.status(200).json({
         status:"success",
@@ -489,7 +480,7 @@ const archiveProject = asyncHandler(async (req,res) => {
     user-> auth , company, role
     projectid-> exist ,company,archive , 
     */
-    const {projectId,archived} = req.body;
+    const {projectId,archived} = req.body ?? {};
     const user = req.user;
     if(!user){
         throw new ApiError(401,"User not authenticated");
@@ -577,8 +568,36 @@ const getMyProjectInvites = asyncHandler(async (req, res) => {
 
 
     
+const getProjectById = asyncHandler(async (req, res) => {
+  const user = req.user;
+  const { projectId } = req.params;
+
+  if (!mongoose.isValidObjectId(projectId)) {
+    throw new ApiError(400, "Invalid projectId");
+  }
+  if (!user.companyId) {
+    throw new ApiError(400, "User does not belong to any company");
+  }
+
+  const project = await Project.findOne({ _id: projectId, companyId: user.companyId });
+  if (!project) throw new ApiError(404, "Project not found");
+
+  const membership = await ProjectMember.findOne({ projectId, userId: user._id }).select("role");
+  if (!membership) throw new ApiError(403, "You are not a member of this project");
+
+  const manager = await User.findById(project.managerId).select(
+    "_id fullname username email profilePictureUrl"
+  );
+
+  res.status(200).json({
+    status: "success",
+    data: { project, role: membership.role, manager },
+  });
+});
+
 export { 
     createProject,
+    getProjectById,
     addEmployee,
     removeEmployee,
 
