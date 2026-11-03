@@ -48,9 +48,19 @@ const taskSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project',
     required: true
+  },
+  companyId: { 
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Company",
+  required: true
   }
 }, {
   timestamps: true
 });
 
+taskSchema.index({ companyId: 1, status: 1 });
+taskSchema.index({ companyId: 1, projectId: 1, status: 1 });
+taskSchema.index({ companyId: 1, assignedTo: 1, status: 1 });
+
 export const Task = mongoose.model("Task", taskSchema);
+
