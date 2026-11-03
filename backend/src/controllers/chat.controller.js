@@ -25,7 +25,7 @@ const getRoomMessages = asyncHandler(async (req, res) => {
       throw new ApiError(400, "Invalid company room");
     }
 
-    if (req.user.companyId.toString() === companyId) {
+    if (req.user.companyId?.toString() === companyId) {
       isAllowed = true;
     }
   }
@@ -69,7 +69,7 @@ const getMyChatRooms = asyncHandler(async (req, res) => {
     "projectName"
   );
 
-  const projectRooms = memberships.map((m) => ({
+  const projectRooms = memberships.filter((m) => m.projectId).map((m) => ({
     roomId: m.projectId._id.toString(),
     name: m.projectId.projectName,
     type: "project",
