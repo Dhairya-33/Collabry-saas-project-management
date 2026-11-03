@@ -1,4 +1,4 @@
-﻿import { Project } from "../models/project.model.js";
+import { Project } from "../models/project.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
 import { User } from "../models/user.model.js";
@@ -549,8 +549,8 @@ const getMyProjectInvites = asyncHandler(async (req, res) => {
     inviteeId: user._id,
     status: "pending",
   })
-    .populate("projectId", "name archived")
-    .populate("invitedBy", "fullName username profilePictureUrl")
+    .populate("projectId", "projectName archived")
+    .populate("inviterId", "fullname username profilePictureUrl")
     .sort({ createdAt: -1 });
 
   res.status(200).json({
