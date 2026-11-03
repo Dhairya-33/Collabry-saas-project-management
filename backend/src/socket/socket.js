@@ -1,139 +1,111 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
+import { parse } from "cookie";
 import { User } from "../models/user.model.js";
-import { ProjectMember } from "../models/projectMember.model.js"; 
-import { Chat } from "../models/chat.model.js"; 
-import { configDotenv } from "dotenv";
-configDotenv({})
+import { ProjectMember } from "../models/projectMember.model.js";
+import { Chat } from "../models/chat.model.js";
 
-let io; 
+let io;
+
+// Room naming (must match chat.controller.js):
+//   company room  -> "company_<companyId>"
+//   project room  -> "<projectId>"
+const companyRoom = (id) => `company_${id}`;
+const managementRoom = (id) => `company_${id}_management`;
+
+export const getIO = () => io;
 
 export const initSocket = (httpServer) => {
   io = new Server(httpServer, {
     cors: {
-      origin: process.env.FRONTEND_URL, // e.g. http://localhost:5173
+      origin: process.env.FRONTEND_URL,
       methods: ["GET", "POST"],
       credentials: true,
     },
   });
 
-  // 1) Authenticate every socket at handshake time
+  // Auth from the httpOnly accessToken cookie (client: io(url, { withCredentials: true }))
   io.use(async (socket, next) => {
     try {
-      // Frontend should connect like: io(BASE_URL, { auth: { token } })
-      const token =
-        socket.handshake.auth?.token ||
-        socket.handshake.headers?.authorization?.replace("Bearer ", "");
-
+      const cookies = parse(socket.handshake.headers.cookie || "");
+      const token = cookies.accessToken;
       if (!token) throw new Error("No token provided");
 
       const decoded = jwt.verify(token, process.env.ACCESSTKN_KEY);
-
-      const userId = decoded?._id || decoded?.this_id;
-      if (!userId) throw new Error("Invalid token payload");
-
-      const user = await User.findById(userId).select(
-        "_id fullname email companyId"
-      );
+      const user = await User.findById(decoded?._id).select("_id fullname username email companyId");
       if (!user) throw new Error("User not found");
 
-      socket.user = user; 
+      socket.user = user;
       next();
     } catch (err) {
-      console.error("Socket auth failed:", err.message);
       next(new Error("Unauthorized"));
     }
   });
 
-  // 2) Main socket connection
   io.on("connection", (socket) => {
     const user = socket.user;
-    console.log(`âœ… Socket connected: ${user.fullname} (${socket.id})`);
+    const displayName = user.fullname || user.username;
 
-
-    // Company-wide general room: "company:<companyId>"
     socket.on("joinCompanyRoom", (companyId) => {
       try {
-        if (!companyId) return socket.emit("error", "companyId required");
-        if (!user.companyId || user.companyId.toString() !== companyId) {
-          return socket.emit(
-            "error",
-            "Unauthorized: not a member of this company"
-          );
+        if (!mongoose.isValidObjectId(companyId)) return socket.emit("error", "valid companyId required");
+        if (!user.companyId || user.companyId.toString() !== String(companyId)) {
+          return socket.emit("error", "Unauthorized: not a member of this company");
         }
-        const room = `company:${companyId}`;
+        const room = companyRoom(companyId);
         socket.join(room);
         socket.emit("joinedRoom", room);
-      } catch (e) {
+      } catch {
         socket.emit("error", "Failed to join company room");
       }
     });
 
-    // Project room: "project:<projectId>" (must be a ProjectMember)
     socket.on("joinProjectRoom", async (projectId) => {
       try {
-        if (!projectId) return socket.emit("error", "projectId required");
-
-        const membership = await ProjectMember.findOne({
-          projectId,
-          userId: user._id,
-        }).select("_id role companyId");
-
-        if (!membership) {
-          return socket.emit(
-            "error",
-            "Unauthorized: not a member of this project"
-          );
-        }
-
-        const room = `project:${projectId}`;
+        if (!mongoose.isValidObjectId(projectId)) return socket.emit("error", "valid projectId required");
+        const membership = await ProjectMember.findOne({ projectId, userId: user._id }).select("_id");
+        if (!membership) return socket.emit("error", "Unauthorized: not a member of this project");
+        const room = String(projectId);
         socket.join(room);
         socket.emit("joinedRoom", room);
-      } catch (e) {
+      } catch {
         socket.emit("error", "Failed to join project room");
       }
     });
 
-    // Management-only room (admin/manager): "company:<companyId>:management"
     socket.on("joinManagementRoom", async (companyId) => {
       try {
-        if (!companyId) return socket.emit("error", "companyId required");
-
-        // Any project membership within the company counts, but role must be admin/manager
+        if (!mongoose.isValidObjectId(companyId)) return socket.emit("error", "valid companyId required");
+        if (!user.companyId || user.companyId.toString() !== String(companyId)) {
+          return socket.emit("error", "Unauthorized: not a member of this company");
+        }
         const membership = await ProjectMember.findOne({
           companyId,
           userId: user._id,
           role: { $in: ["admin", "manager"] },
         }).select("_id");
-
-        if (!membership) {
-          return socket.emit(
-            "error",
-            "Unauthorized: only managers/admins can join management room"
-          );
-        }
-
-        const room = `company:${companyId}:management`;
+        if (!membership) return socket.emit("error", "Unauthorized: managers/admins only");
+        const room = managementRoom(companyId);
         socket.join(room);
         socket.emit("joinedRoom", room);
-      } catch (e) {
+      } catch {
         socket.emit("error", "Failed to join management room");
       }
     });
 
-    
-    socket.on("sendMessage", async ({ room, message }) => {
+    socket.on("sendMessage", async ({ room, message } = {}) => {
       try {
-        if (!room || !message?.trim()) return;
-
-        const joined = socket.rooms.has(room);
-        if (!joined) return socket.emit("error", "Join the room before sending");
+        if (typeof room !== "string" || typeof message !== "string") return;
+        const text = message.trim();
+        if (!text || text.length > 2000) return;
+        if (!socket.rooms.has(room)) return socket.emit("error", "Join the room before sending");
 
         const saved = await Chat.create({
           room,
           sender: user._id,
-          senderName: user.fullname,
-          message: message.trim(),
+          senderName: displayName,
+          message: text,
         });
 
         io.to(room).emit("receiveMessage", {
@@ -151,18 +123,16 @@ export const initSocket = (httpServer) => {
       }
     });
 
-    
-    socket.on("shareFile", async ({ room, fileUrl }) => {
+    socket.on("shareFile", async ({ room, fileUrl } = {}) => {
       try {
-        if (!room || !fileUrl) return;
-
-        const joined = socket.rooms.has(room);
-        if (!joined) return socket.emit("error", "Join the room before sending");
+        if (typeof room !== "string" || typeof fileUrl !== "string") return;
+        if (!/^https:\/\//.test(fileUrl)) return;
+        if (!socket.rooms.has(room)) return socket.emit("error", "Join the room before sending");
 
         const saved = await Chat.create({
           room,
           sender: user._id,
-          senderName: user.fullname,
+          senderName: displayName,
           fileUrl,
         });
 
@@ -180,21 +150,15 @@ export const initSocket = (httpServer) => {
       }
     });
 
-    socket.on("typing", ({ room, isTyping }) => {
-      if (!room) return;
+    socket.on("typing", ({ room, isTyping } = {}) => {
+      if (typeof room !== "string" || !socket.rooms.has(room)) return;
       socket.broadcast.to(room).emit("typing", {
         userId: user._id,
-        userName: user.fullname,
+        userName: displayName,
         isTyping: !!isTyping,
       });
-    });
-
-    socket.on("disconnect", () => {
-      console.log(`âŒ Socket disconnected: ${user.fullname} (${socket.id})`);
     });
   });
 
   return io;
 };
-
-
