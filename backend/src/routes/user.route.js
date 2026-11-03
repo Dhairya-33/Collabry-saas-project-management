@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import {
   registerUser,
   loginUser,
@@ -7,15 +7,16 @@ import {
   updatePassword,
   completeProfile,
   updateProfile,
-  refreshAccessToken
+  refreshAccessToken,
 } from "../controllers/user.controller.js";
 import verifyJWT from "../middlewares/jwt.middleware.js";
 import { multerMiddleware } from "../middlewares/multer.middleware.js";
+import { authLimiter } from "../middlewares/ratelimit.middleware.js";
 
 const router = express.Router();
 
-router.post("/register", registerUser);
-router.post("/login", loginUser);
+router.post("/register", authLimiter, registerUser);
+router.post("/login", authLimiter, loginUser);
 router.post("/refresh", refreshAccessToken);
 router.post("/logout", logoutUser);
 
