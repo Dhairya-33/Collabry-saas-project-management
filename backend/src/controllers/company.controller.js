@@ -1,4 +1,4 @@
-﻿import jwt from "jsonwebtoken";
+import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import { Company } from "../models/company.model.js";
 import { User } from "../models/user.model.js";
@@ -320,7 +320,7 @@ const getCompanyMembers = asyncHandler(async (req, res) => {
 
   const members = await User.find(
     { companyId: company._id },
-    "_id fullName username email phoneNo bio skills profilePictureUrl createdAt"
+    "_id fullname username email phone bio skills profilePictureUrl createdAt"
   ).sort({ username: 1 }); 
 
   res.status(200).json({
