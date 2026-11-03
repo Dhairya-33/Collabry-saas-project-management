@@ -7,7 +7,7 @@ import { Task } from "../models/task.model.js";
 
 
 const assignTask = asyncHandler(async (req, res) => {
-  const { taskName, description, empId, projectId, dueDate } = req.body;
+  const { taskName, description, empId, projectId, dueDate } = req.body ?? {};
 
   if (!taskName || !empId || !projectId) {
     throw new ApiError(400, "taskName, empId, and projectId are required");
@@ -72,7 +72,7 @@ const assignTask = asyncHandler(async (req, res) => {
 
 const editTask = asyncHandler(async (req, res) => {
   const { taskId } = req.params;
-  const { taskName, description, dueDate, status, assignedTo } = req.body;
+  const { taskName, description, dueDate, status, assignedTo } = req.body ?? {};
   const userId = req.user._id;
 
   if (!mongoose.isValidObjectId(taskId)) {
@@ -278,7 +278,7 @@ const managerTasks = asyncHandler(async (req,res) => {
     return res.status(200).json({
       status: "success",
       message: "No tasks found for this project",
-      data: [],
+      data: { tasks: [] },
     });
   }
 
@@ -338,7 +338,7 @@ const managerTasks = asyncHandler(async (req,res) => {
 const respondToTask = asyncHandler(async (req, res) => {
   const user = req.user;
   const { taskId } = req.params;
-  const { status } = req.body;
+  const { status } = req.body ?? {};
 
   if (!isValidObjectId(taskId)) {
     throw new ApiError(400, "Invalid taskId");
