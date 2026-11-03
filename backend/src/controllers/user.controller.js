@@ -1,8 +1,9 @@
+import mongoose  from "mongoose";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
 import { User } from "../models/user.model.js";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";     
+import jwt from "jsonwebtoken";
+
 
 export const sanitizeUser = (user) => {
   if (!user) return null;
@@ -21,6 +22,7 @@ const cookieOptions = {
   secure: process.env.NODE_ENV === "production",
   sameSite: "lax",
 };
+
 
 const generateAccessNRefreshTKN = async (user) => {
   const accessTKN = await user.generateAccessToken();
@@ -83,7 +85,7 @@ const registerUser = asyncHandler(async (req,res) => {
       }
 
       if (!/^[a-zA-Z0-9_]{3,16}$/.test(username))
-        throw new ApiError(400, "Username must be 3–16 chars, only letters, numbers, _");
+        throw new ApiError(400, "Username must be 3â€“16 chars, only letters, numbers, _");
 
 
       const existedUser= await User.findOne(
@@ -126,7 +128,7 @@ const loginUser =  asyncHandler ( async (req,res) => {
     const isMatch = await user.verifyPassword(password);
 
     if ( !isMatch) {
-      throw new ApiError(401, "invalid credentials");
+      throw new ApiError(401, "invalid password");
     }
    
     const {accessTKN,refreshTKN} = await generateAccessNRefreshTKN(user);
@@ -142,7 +144,6 @@ const loginUser =  asyncHandler ( async (req,res) => {
         data:sanitizeUser(user),
     })
 })
-
 const logoutUser = asyncHandler(async (req, res) => {
   const refreshToken = req.cookies?.refreshToken;
 
@@ -174,6 +175,7 @@ const logoutUser = asyncHandler(async (req, res) => {
       message: "User logged out successfully",
     });
 });
+
 
 const getCurrentUser = asyncHandler(async (req,res) => {
   const user = req.user;
@@ -222,7 +224,7 @@ const updatePassword = asyncHandler(async (req, res) => {
 
 const  completeProfile = asyncHandler(async (req,res) => {
   const {fullname,phone,bio,skills} = req.body;
-  const profilePictureUrl = req.file.path;
+  const profilePictureUrl = req.file?.path;
 
   const user = req.user;
   if(!user){
@@ -237,7 +239,7 @@ const  completeProfile = asyncHandler(async (req,res) => {
   user.profilePictureUrl = profilePictureUrl;
   user.phone = phone;
   user.bio = bio;
-  user.skills = skills;
+  user.skills = Array.isArray(skills) ? skills : String(skills).split(",").map((s) => s.trim()).filter(Boolean);
   user.isProfileComplete = true;
   user.fullname = fullname;
   await user.save();
@@ -251,7 +253,7 @@ const  completeProfile = asyncHandler(async (req,res) => {
 
 const updateProfile = asyncHandler(async (req,res) => {
   const {phone,bio,skills} = req.body;
-  profilePictureUrl = req.file?.path;
+  const profilePictureUrl = req.file?.path;
   
   const user = req.user;  
   if(!user){
@@ -260,7 +262,7 @@ const updateProfile = asyncHandler(async (req,res) => {
   if(profilePictureUrl) user.profilePictureUrl = profilePictureUrl;
   if(phone) user.phone = phone;
   if(bio) user.bio = bio;
-  if(skills && skills.length > 0) user.skills = skills;
+  if(skills && skills.length > 0) user.skills = Array.isArray(skills) ? skills : String(skills).split(",").map((s) => s.trim()).filter(Boolean);
   await user.save();
   res.status(200).json({
     status:"success",
@@ -268,6 +270,7 @@ const updateProfile = asyncHandler(async (req,res) => {
     data:user   
   })
 })
+
 
 export{
   loginUser,
