@@ -11,7 +11,7 @@ let io;
 export const initSocket = (httpServer) => {
   io = new Server(httpServer, {
     cors: {
-      origin: process.env.CLIENT_URL || "*", // e.g. http://localhost:5173
+      origin: process.env.FRONTEND_URL, // e.g. http://localhost:5173
       methods: ["GET", "POST"],
       credentials: true,
     },
@@ -48,7 +48,7 @@ export const initSocket = (httpServer) => {
   // 2) Main socket connection
   io.on("connection", (socket) => {
     const user = socket.user;
-    console.log(`✅ Socket connected: ${user.fullname} (${socket.id})`);
+    console.log(`âœ… Socket connected: ${user.fullname} (${socket.id})`);
 
 
     // Company-wide general room: "company:<companyId>"
@@ -190,7 +190,7 @@ export const initSocket = (httpServer) => {
     });
 
     socket.on("disconnect", () => {
-      console.log(`❌ Socket disconnected: ${user.fullname} (${socket.id})`);
+      console.log(`âŒ Socket disconnected: ${user.fullname} (${socket.id})`);
     });
   });
 
