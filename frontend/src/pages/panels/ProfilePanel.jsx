@@ -1,18 +1,45 @@
+import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { logoutUser } from "@/services/auth.service";
 import { clearUser } from "@/store/authSlice";
+import Avatar from "@/components/ui/Avatar";
 
 export default function ProfilePanel({ open, onClose }) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const user = useSelector((s) => s.auth.user);
+  const roles = useSelector((s) => s.overview.data.roles);
+
+  const roleLabel =
+    [
+      roles.isAdmin && "Admin",
+      roles.isManager && "Manager",
+      roles.isEmployee && "Employee",
+    ]
+      .filter(Boolean)
+      .join(" · ") || "Workspace Member";
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  const goTo = (path, state) => {
+    onClose();
+    navigate(path, { state });
+  };
 
   const handleLogout = async () => {
     try {
       await logoutUser();
-    } catch {}
-    finally {
+    } catch {
+      /* the session may already be gone; clear local state anyway */
+    } finally {
       dispatch(clearUser());
       navigate("/auth", { replace: true });
     }
@@ -30,6 +57,10 @@ export default function ProfilePanel({ open, onClose }) {
 
       {/* PANEL */}
       <div
+        role="dialog"
+        aria-label="Profile"
+        aria-hidden={!open}
+        inert={!open}
         onClick={(e) => e.stopPropagation()}
         className={`absolute top-0 right-0 h-full w-[340px] bg-[#FFFFFF] z-50
         border-l border-[#E5E7EB]
@@ -43,17 +74,17 @@ export default function ProfilePanel({ open, onClose }) {
           <div>
             {/* USER */}
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-full bg-[#F1F5F9] flex items-center justify-center text-sm font-semibold text-[#1F2933]">
-                {user?.fullname?.[0] || user?.username?.[0] || "U"}
-              </div>
+              <Avatar
+                user={user}
+                className="w-10 h-10 bg-[#F1F5F9] text-sm font-semibold text-[#1F2933]"
+              />
 
               <div>
                 <div className="text-[15px] font-semibold text-[#1F2933] leading-tight">
                   {user?.fullname || user?.username || "User"}
                 </div>
                 <div className="text-[12px] text-[#6B7280]">
-                  {/* TODO: replace with real role */}
-                  Workspace Member
+                  {roleLabel}
                 </div>
               </div>
             </div>
@@ -68,22 +99,18 @@ export default function ProfilePanel({ open, onClose }) {
             {/* ACTIONS */}
             <div className="space-y-1 text-[14px]">
               <button
-                onClick={() => {
-                  // TODO: implement profile page
-                  navigate("/profile");
-                }}
-                className="w-full text-left px-3 py-2 rounded-lg 
+                type="button"
+                onClick={() => goTo("/settings", { tab: "profile" })}
+                className="w-full text-left px-3 py-2 rounded-lg
                 hover:bg-[#F6F4F0] active:scale-[0.98] transition"
               >
                 Update Profile
               </button>
 
               <button
-                onClick={() => {
-                  // TODO: implement change password page
-                  navigate("/change-password");
-                }}
-                className="w-full text-left px-3 py-2 rounded-lg 
+                type="button"
+                onClick={() => goTo("/settings", { tab: "password" })}
+                className="w-full text-left px-3 py-2 rounded-lg
                 hover:bg-[#F6F4F0] active:scale-[0.98] transition"
               >
                 Change Password
@@ -96,8 +123,9 @@ export default function ProfilePanel({ open, onClose }) {
             <div className="border-t border-[#F1F5F9] my-4" />
 
             <button
+              type="button"
               onClick={handleLogout}
-              className="w-full text-left px-3 py-2 rounded-lg 
+              className="w-full text-left px-3 py-2 rounded-lg
               text-red-500 font-medium
               hover:bg-red-50 active:scale-[0.98] transition"
             >

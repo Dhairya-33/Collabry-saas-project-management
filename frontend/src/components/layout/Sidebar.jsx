@@ -6,19 +6,29 @@ import {
   MessageSquare,
   Settings,
 } from "lucide-react";
-import { useState, useEffect } from "react";
-import React from "react";
+import { memo, useState } from "react";
+import { useSelector } from "react-redux";
 
 function SidebarNav() {
   const location = useLocation();
+  const roles = useSelector((s) => s.overview.data.roles);
   const projectActive = location.pathname.startsWith("/projects");
 
   const [open, setOpen] = useState(projectActive);
+  const [wasActive, setWasActive] = useState(projectActive);
 
-  // keep dropdown in sync with route
-  useEffect(() => {
+  // open the group when the route moves into /projects
+  if (projectActive !== wasActive) {
+    setWasActive(projectActive);
     if (projectActive) setOpen(true);
-  }, [projectActive]);
+  }
+
+  const projectLinks = [
+    roles.isAdmin && { to: "/projects/active", label: "Active" },
+    roles.isManager && { to: "/projects/managing", label: "Managing" },
+    roles.isEmployee && { to: "/projects/contributing", label: "Contributing" },
+    roles.isAdmin && { to: "/projects/archived", label: "Archived" },
+  ].filter(Boolean);
 
   return (
     <nav className="space-y-4">
@@ -28,46 +38,53 @@ function SidebarNav() {
       </NavItem>
 
       {/* Projects */}
-      <div>
-        <button
-          onClick={() => setOpen((s) => !s)}
-          className={`flex items-center gap-3 w-full text-[15px] font-semibold px-3 py-3 rounded-lg transition ${
-            projectActive
-              ? "text-[rgb(var(--color-brand-primary))]"
-              : "text-[rgb(var(--color-text-primary))]"
-          }`}
-        >
-          <Layers size={20} strokeWidth={1.8} />
-          Projects
-
-          <span
-            className={`ml-auto text-xs transition-transform ${
-              open ? "rotate-90" : ""
+      {projectLinks.length > 0 && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setOpen((s) => !s)}
+            aria-expanded={open}
+            className={`flex items-center gap-3 w-full text-[15px] font-semibold px-3 py-3 rounded-lg transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-brand-secondary))] ${
+              projectActive
+                ? "text-[rgb(var(--color-brand-primary))]"
+                : "text-[rgb(var(--color-text-primary))]"
             }`}
           >
-            ▶
-          </span>
-        </button>
+            <Layers size={20} strokeWidth={1.8} />
+            Projects
 
-        <div
-          className={`overflow-hidden transition-all duration-300 ${
-            open ? "max-h-96" : "max-h-0"
-          }`}
-        >
-          <div className="pl-9 mt-2 space-y-2 border-l border-[rgb(var(--color-border-subtle))]">
+            <span
+              aria-hidden="true"
+              className={`ml-auto text-xs transition-transform ${
+                open ? "rotate-90" : ""
+              }`}
+            >
+              ▶
+            </span>
+          </button>
 
-            <SubItem to="/projects/active">Active</SubItem>
-            <SubItem to="/projects/managing">Managing</SubItem>
-            <SubItem to="/projects/contributing">Contributing</SubItem>
-            <SubItem to="/projects/archived">Archived</SubItem>
-
+          <div
+            inert={!open}
+            className={`overflow-hidden transition-all duration-300 ${
+              open ? "max-h-96" : "max-h-0"
+            }`}
+          >
+            <div className="pl-9 mt-2 space-y-2 border-l border-[rgb(var(--color-border-subtle))]">
+              {projectLinks.map((link) => (
+                <SubItem key={link.to} to={link.to}>
+                  {link.label}
+                </SubItem>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <NavItem to="/members" icon={Users}>
-        Members
-      </NavItem>
+      {roles.isAdmin && (
+        <NavItem to="/members" icon={Users}>
+          Members
+        </NavItem>
+      )}
 
       <NavItem to="/chat" icon={MessageSquare}>
         Chat
@@ -85,7 +102,7 @@ function SidebarNav() {
 
 function NavItem({ to, icon: Icon, children }) {
   return (
-    <NavLink to={to}>
+    <NavLink to={to} className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-brand-secondary))]">
       {({ isActive }) => (
         <div
           className={`flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-semibold transition ${
@@ -104,7 +121,7 @@ function NavItem({ to, icon: Icon, children }) {
 
 function SubItem({ to, children }) {
   return (
-    <NavLink to={to}>
+    <NavLink to={to} className="block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-brand-secondary))]">
       {({ isActive }) => (
         <div
           className={`px-3 py-2.5 rounded-lg text-[14px] transition ${
@@ -120,4 +137,4 @@ function SubItem({ to, children }) {
   );
 }
 
-export default React.memo(SidebarNav);
+export default memo(SidebarNav);
