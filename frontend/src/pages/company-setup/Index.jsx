@@ -1,17 +1,36 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { useLocation, useNavigate } from "react-router-dom";
-import { useDispatch, useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { createCompany, joinCompany } from "@/services/company.service";
 import { getCurrentUser } from "@/services/auth.service";
+import { setUser } from "@/store/authSlice";
+
 /* ================= UTIL ================= */
 
-function useQuery() {
-  const { search } = useLocation();
-  return useMemo(() => new URLSearchParams(search), [search]);
-}
+const INVITE_KEY = "inviteToken";
+
+const readStoredToken = () => {
+  try {
+    return sessionStorage.getItem(INVITE_KEY) || "";
+  } catch {
+    return "";
+  }
+};
+
+// accepts a bare token or a full link like https://app/invite/<token>
+const parseToken = (input) => {
+  const value = (input || "").trim();
+  if (!value) return "";
+  try {
+    const match = new URL(value).pathname.match(/\/invite\/([^/]+)/);
+    return match ? decodeURIComponent(match[1]) : value;
+  } catch {
+    return value;
+  }
+};
 
 /* ================= MOTION ================= */
 
@@ -26,11 +45,9 @@ const fadeUp = {
 
 export default function CompanySetup() {
   const navigate = useNavigate();
-  const query = useQuery();
   const dispatch = useDispatch();
-  const user = useSelector((s) => s.auth.user);
 
-  const [mode, setMode] = useState("create");
+  const [mode, setMode] = useState(() => (readStoredToken() ? "join" : "create"));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [confirmedToken, setConfirmedToken] = useState(null);
@@ -42,40 +59,13 @@ export default function CompanySetup() {
     setValue,
     reset,
     formState: { errors },
-  } = useForm({ mode: "onSubmit" });
+  } = useForm({
+    mode: "onSubmit",
+    defaultValues: { invite: readStoredToken() },
+  });
 
   const inviteInput = watch("invite");
-
-  /* ================= ON MOUNT ================= */
-
-  useEffect(() => {
-    const tokenFromUrl = query.get("token");
-    const tokenFromSession = sessionStorage.getItem("inviteToken");
-
-    if (tokenFromUrl && !user) {
-      sessionStorage.setItem("inviteToken", tokenFromUrl);
-      navigate("/auth", { replace: true });
-      return;
-    }
-
-    const resolved = tokenFromUrl || tokenFromSession;
-    if (resolved) {
-      setMode("join");
-      setValue("invite", resolved);
-    }
-  }, [query, user, navigate, setValue]);
-
-  /* ================= TOKEN PARSING ================= */
-
-  const resolvedToken = useMemo(() => {
-    if (!inviteInput) return "";
-    try {
-      const url = new URL(inviteInput);
-      return url.searchParams.get("token") || inviteInput;
-    } catch {
-      return inviteInput;
-    }
-  }, [inviteInput]);
+  const resolvedToken = useMemo(() => parseToken(inviteInput), [inviteInput]);
 
   /* ================= ACTIONS ================= */
 
@@ -93,7 +83,7 @@ export default function CompanySetup() {
         description: data.description || "",
       });
       await refreshUser();
-      navigate("/", { replace: true });
+      navigate("/dashboard", { replace: true });
     } catch (e) {
       setError(e?.message || "Failed to create company");
     } finally {
@@ -106,6 +96,7 @@ export default function CompanySetup() {
       setError("Invite token required");
       return;
     }
+    setError("");
     setConfirmedToken(resolvedToken);
   };
 
@@ -115,9 +106,13 @@ export default function CompanySetup() {
     setError("");
     try {
       await joinCompany({ token: confirmedToken });
-      sessionStorage.removeItem("inviteToken");
+      try {
+        sessionStorage.removeItem(INVITE_KEY);
+      } catch {
+        /* storage unavailable, nothing to clear */
+      }
       await refreshUser();
-      navigate("/", { replace: true });
+      navigate("/dashboard", { replace: true });
     } catch (e) {
       setError(e?.message || "Invalid invite token");
     } finally {
@@ -154,7 +149,7 @@ export default function CompanySetup() {
                     setError("");
                     reset();
                   }}
-                  className={`px-5 py-2.5 text-sm rounded-lg transition
+                  className={`px-5 py-2.5 text-sm rounded-lg transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary
                     ${
                       mode === t
                         ? "bg-surface-base shadow-soft text-brand-primary"
@@ -178,18 +173,21 @@ export default function CompanySetup() {
                   className="space-y-6"
                 >
                   <Field
+                    id="companyName"
                     label="Company name"
                     error={errors.companyName?.message}
                   >
                     <input
+                      id="companyName"
                       {...register("companyName", { required: "Required" })}
                       className="input"
                       placeholder="Acme Inc."
                     />
                   </Field>
 
-                  <Field label="Description">
+                  <Field id="description" label="Description">
                     <textarea
+                      id="description"
                       {...register("description")}
                       rows={3}
                       className="textarea"
@@ -207,8 +205,9 @@ export default function CompanySetup() {
                 <motion.div key="join" {...fadeUp} className="space-y-6">
                   {!confirmedToken && (
                     <>
-                      <Field label="Invite link or token">
+                      <Field id="invite" label="Invite link or token">
                         <input
+                          id="invite"
                           {...register("invite")}
                           className="input"
                           placeholder="Paste or type invite token"
@@ -216,6 +215,7 @@ export default function CompanySetup() {
                       </Field>
 
                       <PrimaryButton
+                        type="button"
                         loading={false}
                         disabled={!resolvedToken}
                         onClick={confirmInvite}
@@ -232,7 +232,7 @@ export default function CompanySetup() {
                           You are about to join
                         </p>
                         <h3 className="mt-1 text-lg font-semibold text-text-primary">
-                           A company's workspace
+                          A company&apos;s workspace
                         </h3>
                       </div>
 
@@ -253,7 +253,11 @@ export default function CompanySetup() {
                         </button>
                       </div>
 
-                      <PrimaryButton loading={loading} onClick={onJoin}>
+                      <PrimaryButton
+                        type="button"
+                        loading={loading}
+                        onClick={onJoin}
+                      >
                         Join company
                       </PrimaryButton>
                     </div>
@@ -263,7 +267,7 @@ export default function CompanySetup() {
             </AnimatePresence>
 
             {error && (
-              <p className="mt-6 text-sm text-status-warning">
+              <p role="alert" className="mt-6 text-sm text-status-warning">
                 {error}
               </p>
             )}
@@ -276,11 +280,11 @@ export default function CompanySetup() {
 
 /* ================= PRIMITIVES ================= */
 
-function Field({ label, error, children }) {
+function Field({ id, label, error, children }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5 min-h-[20px]">
-        <label className="text-sm font-medium text-text-primary">
+        <label htmlFor={id} className="text-sm font-medium text-text-primary">
           {label}
         </label>
         <span className="text-xs text-text-muted">
@@ -292,17 +296,18 @@ function Field({ label, error, children }) {
   );
 }
 
-function PrimaryButton({ children, loading, disabled, ...props }) {
+function PrimaryButton({ children, loading, disabled, type = "submit", ...props }) {
   return (
     <button
+      type={type}
       disabled={disabled || loading}
       {...props}
       className="w-full h-12 rounded-xl bg-brand-primary text-text-inverse font-medium transition
                  hover:brightness-[1.02]
+                 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary
                  disabled:opacity-60 disabled:cursor-not-allowed"
     >
       {loading ? "Please wait…" : children}
     </button>
   );
 }
-
