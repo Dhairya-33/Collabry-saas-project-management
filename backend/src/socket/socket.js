@@ -1,20 +1,38 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
-import mongoose from "mongoose";
 import { parse } from "cookie";
 import { User } from "../models/user.model.js";
-import { ProjectMember } from "../models/projectMember.model.js";
 import { Chat } from "../models/chat.model.js";
+import {
+  OID_RE,
+  parseRoomId,
+  companyRoomId,
+  managementRoomId,
+  getRoomAccess,
+} from "../utils/chatRooms.js";
 
 let io;
 
-// Room naming (must match chat.controller.js):
-//   company room  -> "company_<companyId>"
-//   project room  -> "<projectId>"
-const companyRoom = (id) => `company_${id}`;
-const managementRoom = (id) => `company_${id}_management`;
-
 export const getIO = () => io;
+
+// only accept files that live in OUR Cloudinary account
+const cloudinaryPrefix = () =>
+  `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/`;
+
+// simple per-socket limiter: max `max` events per `windowMs`
+const makeLimiter = (max, windowMs) => {
+  let count = 0;
+  let resetAt = Date.now() + windowMs;
+  return () => {
+    const now = Date.now();
+    if (now > resetAt) {
+      count = 0;
+      resetAt = now + windowMs;
+    }
+    count += 1;
+    return count <= max;
+  };
+};
 
 export const initSocket = (httpServer) => {
   io = new Server(httpServer, {
@@ -46,60 +64,48 @@ export const initSocket = (httpServer) => {
   io.on("connection", (socket) => {
     const user = socket.user;
     const displayName = user.fullname || user.username;
+    const allowSend = makeLimiter(20, 10_000);
 
-    socket.on("joinCompanyRoom", (companyId) => {
+    // re-reads the user so joining a company AFTER connecting still works
+    const joinIfAllowed = async (rawId, roomFor, deniedMsg, failMsg) => {
       try {
-        if (!mongoose.isValidObjectId(companyId)) return socket.emit("error", "valid companyId required");
-        if (!user.companyId || user.companyId.toString() !== String(companyId)) {
-          return socket.emit("error", "Unauthorized: not a member of this company");
-        }
-        const room = companyRoom(companyId);
+        const id = String(rawId ?? "");
+        if (!OID_RE.test(id)) return socket.emit("error", "valid id required");
+
+        const me = await User.findById(user._id).select("_id companyId");
+        if (!me) return socket.emit("error", "User not found");
+
+        const room = roomFor(id);
+        const access = await getRoomAccess(me, room);
+        if (access.notFound) return socket.emit("error", "Room not found");
+        if (!access.canRead) return socket.emit("error", deniedMsg);
+
         socket.join(room);
         socket.emit("joinedRoom", room);
       } catch {
-        socket.emit("error", "Failed to join company room");
+        socket.emit("error", failMsg);
       }
-    });
+    };
 
-    socket.on("joinProjectRoom", async (projectId) => {
-      try {
-        if (!mongoose.isValidObjectId(projectId)) return socket.emit("error", "valid projectId required");
-        const membership = await ProjectMember.findOne({ projectId, userId: user._id }).select("_id");
-        if (!membership) return socket.emit("error", "Unauthorized: not a member of this project");
-        const room = String(projectId);
-        socket.join(room);
-        socket.emit("joinedRoom", room);
-      } catch {
-        socket.emit("error", "Failed to join project room");
-      }
-    });
+    socket.on("joinCompanyRoom", (id) =>
+      joinIfAllowed(id, companyRoomId, "Unauthorized: not a member of this company", "Failed to join company room")
+    );
+    socket.on("joinProjectRoom", (id) =>
+      joinIfAllowed(id, (x) => String(x), "Unauthorized: not a member of this project", "Failed to join project room")
+    );
+    socket.on("joinManagementRoom", (id) =>
+      joinIfAllowed(id, managementRoomId, "Unauthorized: managers/admins only", "Failed to join management room")
+    );
 
-    socket.on("joinManagementRoom", async (companyId) => {
+    socket.on("sendMessage", async (payload) => {
       try {
-        if (!mongoose.isValidObjectId(companyId)) return socket.emit("error", "valid companyId required");
-        if (!user.companyId || user.companyId.toString() !== String(companyId)) {
-          return socket.emit("error", "Unauthorized: not a member of this company");
-        }
-        const membership = await ProjectMember.findOne({
-          companyId,
-          userId: user._id,
-          role: { $in: ["admin", "manager"] },
-        }).select("_id");
-        if (!membership) return socket.emit("error", "Unauthorized: managers/admins only");
-        const room = managementRoom(companyId);
-        socket.join(room);
-        socket.emit("joinedRoom", room);
-      } catch {
-        socket.emit("error", "Failed to join management room");
-      }
-    });
-
-    socket.on("sendMessage", async ({ room, message } = {}) => {
-      try {
+        const { room, message } = payload ?? {};
         if (typeof room !== "string" || typeof message !== "string") return;
+        if (parseRoomId(room).type === "invalid") return;
         const text = message.trim();
         if (!text || text.length > 2000) return;
         if (!socket.rooms.has(room)) return socket.emit("error", "Join the room before sending");
+        if (!allowSend()) return socket.emit("error", "You are sending messages too fast");
 
         const saved = await Chat.create({
           room,
@@ -123,11 +129,16 @@ export const initSocket = (httpServer) => {
       }
     });
 
-    socket.on("shareFile", async ({ room, fileUrl } = {}) => {
+    socket.on("shareFile", async (payload) => {
       try {
+        const { room, fileUrl } = payload ?? {};
         if (typeof room !== "string" || typeof fileUrl !== "string") return;
-        if (!/^https:\/\//.test(fileUrl)) return;
+        if (parseRoomId(room).type === "invalid") return;
+        if (fileUrl.length > 2048 || !fileUrl.startsWith(cloudinaryPrefix())) {
+          return socket.emit("error", "Invalid file URL");
+        }
         if (!socket.rooms.has(room)) return socket.emit("error", "Join the room before sending");
+        if (!allowSend()) return socket.emit("error", "You are sending messages too fast");
 
         const saved = await Chat.create({
           room,
@@ -150,7 +161,8 @@ export const initSocket = (httpServer) => {
       }
     });
 
-    socket.on("typing", ({ room, isTyping } = {}) => {
+    socket.on("typing", (payload) => {
+      const { room, isTyping } = payload ?? {};
       if (typeof room !== "string" || !socket.rooms.has(room)) return;
       socket.broadcast.to(room).emit("typing", {
         userId: user._id,
