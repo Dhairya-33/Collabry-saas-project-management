@@ -72,13 +72,34 @@ const start = async () => {
 };
 start();
 
+let shuttingDown = false;
 const shutdown = (signal) => {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log(`${signal} received, shutting down`);
+
+  const force = setTimeout(() => {
+    console.error("Shutdown timed out, forcing exit");
+    process.exit(1);
+  }, 10000);
+  force.unref();
+
+  // io.close() disconnects websocket clients and closes the HTTP server
   io.close(async () => {
-    await mongoose.connection.close();
-    process.exit(0);
+    try {
+      await mongoose.connection.close();
+      process.exit(0);
+    } catch (e) {
+      console.error("Error while closing MongoDB:", e.message);
+      process.exit(1);
+    }
   });
-  setTimeout(() => process.exit(1), 10000).unref();
+  server.closeIdleConnections?.();
 };
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
+
+// scripts/test-shutdown.mjs triggers this on Windows, where POSIX signals cannot be delivered
+process.on("message", (msg) => {
+  if (msg === "shutdown") shutdown("IPC");
+});
