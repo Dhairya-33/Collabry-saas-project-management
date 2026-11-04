@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { fadeInUp, fadeIn, staggerContainer } from "@/lib/motion";
@@ -15,22 +16,21 @@ export default function LandingPage() {
           <nav className="hidden md:flex gap-8 text-sm text-text-secondary">
             <a href="#features" className="hover:text-brand-primary">Features</a>
             <a href="#how" className="hover:text-brand-primary">How it works</a>
-            <a href="#pricing" className="hover:text-brand-primary">Pricing</a>
           </nav>
 
           <div className="flex gap-3">
-            <a
-              href="/auth"
+            <Link
+              to="/auth"
               className="px-4 py-2 rounded-lg text-sm text-brand-primary border border-border hover:bg-surface-base transition"
             >
               Login
-            </a>
-            <a
-              href="/auth"
+            </Link>
+            <Link
+              to="/auth"
               className="px-4 py-2 rounded-lg text-sm bg-brand-primary text-text-inverse hover:bg-brand-primary/90 transition"
             >
               Get Started
-            </a>
+            </Link>
           </div>
         </div>
       </header>
@@ -56,17 +56,17 @@ export default function LandingPage() {
             </p>
 
             <div className="flex gap-4">
-              <a
-                href="/register"
+              <Link
+                to="/auth"
                 className="px-6 py-3 rounded-xl bg-brand-primary text-text-inverse font-medium hover:bg-brand-primary/90"
               >
                 Get Started
-              </a>
+              </Link>
               <a
-                href="#demo"
+                href="#features"
                 className="px-6 py-3 rounded-xl border border-border text-text-primary"
               >
-                Request Demo
+                See features
               </a>
             </div>
           </motion.div>
@@ -81,24 +81,8 @@ export default function LandingPage() {
         </div>
       </motion.section>
 
-      {/* ================= TRUST ================= */}
-      <section className="py-16 border-t border-border">
-        <div className="max-w-6xl mx-auto px-6 text-center">
-          <p className="text-sm text-text-secondary mb-8">
-            Trusted by fast-growing teams and enterprises
-          </p>
-          <div className="flex justify-center gap-10 opacity-70">
-            <span>Acme Corp</span>
-            <span>NovaTech</span>
-            <span>Cloudify</span>
-            <span>Zenware</span>
-            <span>Buildify</span>
-          </div>
-        </div>
-      </section>
-
       {/* ================= FEATURES ================= */}
-      <section id="features" className="py-24 bg-background-app">
+      <section id="features" className="py-24 bg-background-app border-t border-border">
         <div className="max-w-7xl mx-auto px-6">
           <h3 className="text-3xl font-semibold mb-12 text-center">
             Everything you need to run your organization
@@ -162,31 +146,20 @@ export default function LandingPage() {
           <p className="mb-8 text-text-inverse/80">
             Join teams that manage work with clarity and confidence.
           </p>
-          <a
-            href="/register"
+          <Link
+            to="/auth"
             className="inline-flex items-center gap-2 bg-surface-base text-brand-primary px-6 py-3 rounded-xl font-medium hover:opacity-90"
           >
             Get Started <ArrowRight size={18} />
-          </a>
+          </Link>
         </div>
       </section>
 
       {/* ================= FOOTER ================= */}
       <footer className="bg-background-app border-t border-border py-10">
-        <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-4 gap-6 text-sm text-text-secondary">
-          {[
-            ["Product", ["Features", "Security", "Roadmap"]],
-            ["Company", ["About", "Careers", "Contact"]],
-            ["Resources", ["Docs", "API", "Support"]],
-            ["Legal", ["Privacy", "Terms"]],
-          ].map(([title, items]) => (
-            <div key={title}>
-              <h4 className="font-medium text-text-primary mb-2">{title}</h4>
-              {items.map((i) => (
-                <p key={i}>{i}</p>
-              ))}
-            </div>
-          ))}
+        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between text-sm text-text-secondary">
+          <span className="font-medium text-text-primary">Collabry</span>
+          <span>© {new Date().getFullYear()} Collabry</span>
         </div>
       </footer>
     </div>
