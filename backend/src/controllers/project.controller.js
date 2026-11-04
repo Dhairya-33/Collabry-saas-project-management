@@ -129,7 +129,7 @@ const addEmployee = asyncHandler(async (req,res) => {
     projectId,
     userId: empId,
     role: "employee",
-    companyId: project.companyId, // âœ… FIXED
+    companyId: project.companyId,
     });
 
     res.status(200).json({

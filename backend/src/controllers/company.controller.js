@@ -54,6 +54,10 @@ const joinCompany = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid or expired invite token");
   }
 
+  if (decoded?.type !== "company_invite") {
+    throw new ApiError(400, "Invalid invite token");
+  }
+
   const company = await Company.findById(decoded.companyId);
   if (!company) throw new ApiError(404, "Company not found");
 
@@ -128,7 +132,7 @@ const removeCompanyMember = asyncHandler(async (req, res) => {
     throw new ApiError(400, "userId is required");
   }
 
-  // 1ï¸âƒ£ Validate company + owner
+  // 1) Validate company + owner
   const company = await Company.findById(owner.companyId);
   if (!company) {
     throw new ApiError(404, "Company not found");
@@ -138,7 +142,7 @@ const removeCompanyMember = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Only company owner can remove members");
   }
 
-  // 2ï¸âƒ£ Validate target user
+  // 2) Validate target user
   const user = await User.findById(userId);
   if (!user) {
     throw new ApiError(404, "User not found");
@@ -148,12 +152,12 @@ const removeCompanyMember = asyncHandler(async (req, res) => {
     throw new ApiError(400, "User does not belong to this company");
   }
 
-  // 3ï¸âƒ£ Prevent removing company owner
+  // 3) Prevent removing company owner
   if (user._id.toString() === company.createdBy.toString()) {
     throw new ApiError(400, "Company owner cannot be removed");
   }
 
-  // 4ï¸âƒ£ BLOCK if user manages any ACTIVE project
+  // 4) BLOCK if user manages any ACTIVE project
   const memberships = await ProjectMember.find({
     companyId: company._id,
     userId: user._id,
@@ -174,19 +178,19 @@ const removeCompanyMember = asyncHandler(async (req, res) => {
     );
   }
 
-  // 5ï¸âƒ£ Remove from ALL project memberships (active + archived)
+  // 5) Remove from ALL project memberships (active + archived)
   await ProjectMember.deleteMany({
     companyId: company._id,
     userId: user._id,
   });
 
-  // 6ï¸âƒ£ Remove all pending project invites
+  // 6) Remove all pending project invites
   await ProjectInvite.deleteMany({
     companyId: company._id,
     inviteeId: user._id,
   });
 
-  // 7ï¸âƒ£ Detach user from company
+  // 7) Detach user from company
   user.companyId = null;
   await user.save();
 
@@ -254,7 +258,7 @@ const reassignProjectManager = asyncHandler(async (req, res) => {
 
       /* ========= REASSIGN ========= */
 
-      // 1ï¸âƒ£ Demote current manager explicitly
+      // 1) Demote current manager explicitly
       const oldMembership = await ProjectMember.findOne({
         projectId,
         userId: project.managerId,
@@ -292,7 +296,7 @@ const reassignProjectManager = asyncHandler(async (req, res) => {
         await newMembership.save({ session });
       }
 
-      // 3ï¸âƒ£ Sync project reference
+      // 3) Sync project reference
       project.managerId = newManagerUserId;
       await project.save({ session });
     });
@@ -487,7 +491,7 @@ const getOverview = asyncHandler(async (req, res) => {
         $match: {
           companyId: company._id,
           assignedTo: user._id,
-          projectId: { $in: employeeProjectIds }, // âœ… safety layer
+          projectId: { $in: employeeProjectIds }, // safety layer
         },
       },
       {

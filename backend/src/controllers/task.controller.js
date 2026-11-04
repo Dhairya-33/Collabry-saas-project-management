@@ -23,7 +23,7 @@ const assignTask = asyncHandler(async (req, res) => {
   const project = await Project.findById(projectId).select("companyId");
   if (!project) throw new ApiError(404, "Project not found");
 
-  if (project.companyId.toString() !== req.user.companyId.toString()) {
+  if (project.companyId.toString() !== req.user.companyId?.toString()) {
     throw new ApiError(403, "Unauthorized access to this project");
   }
 
@@ -58,7 +58,7 @@ const assignTask = asyncHandler(async (req, res) => {
     assignedBy: managerId,
     dueDate,
     projectId,
-    companyId: project.companyId, // âœ… FIXED
+    companyId: project.companyId,
     status: "pending",
     fileUrl,
   });
@@ -289,7 +289,7 @@ const managerTasks = asyncHandler(async (req,res) => {
     "completed": 3,
   };
 
-  // Sort tasks â†’ employee name â†’ status â†’ due date
+  // Sort tasks -> employee name -> status -> due date
   tasks.sort((a, b) => {
     const nameA = (a.assignedTo?.fullname || a.assignedTo?.username || "").toLowerCase();
     const nameB = (b.assignedTo?.fullname || b.assignedTo?.username || "").toLowerCase();
@@ -324,7 +324,7 @@ const managerTasks = asyncHandler(async (req,res) => {
     return acc;
   }, {});
 
-  // Convert grouped object â†’ array for frontend
+  // Convert grouped object -> array for frontend
   const result = Object.values(grouped);
 
 
