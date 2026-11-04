@@ -61,7 +61,7 @@ app.use((req, res) =>
 app.use(errorHandler);
 
 const server = http.createServer(app);
-initSocket(server);
+const io = initSocket(server);
 
 const PORT = process.env.PORT || 5000;
 
@@ -74,7 +74,7 @@ start();
 
 const shutdown = (signal) => {
   console.log(`${signal} received, shutting down`);
-  server.close(async () => {
+  io.close(async () => {
     await mongoose.connection.close();
     process.exit(0);
   });
