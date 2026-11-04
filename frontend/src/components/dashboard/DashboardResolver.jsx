@@ -1,49 +1,65 @@
-// DashboardResolver.jsx
-
-import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import AdminOverview from "./AdminOverview";
 import ManagerOverview from "./ManagerOverview";
 import EmployeeOverview from "./EmployeeOverview";
 import HybridOverview from "./HybridOverview";
-import { getManagingProjects, getContributingProjects } from "@/store/projectSlice";
+import EmptyState from "@/components/ui/EmptyState";
+import Skeleton from "@/components/ui/Skeleton";
+import { getOverview } from "@/store/overviewSlice";
 
 export default function DashboardResolver() {
   const dispatch = useDispatch();
-  const { user } = useSelector(s => s.auth);
-  const { managing, contributing, loading } = useSelector(s => s.projects);
+  const { data, loaded, error } = useSelector((s) => s.overview);
 
-  useEffect(() => {
-    dispatch(getManagingProjects());
-    dispatch(getContributingProjects());
-  }, [dispatch]);
+  if (!loaded && error) {
+    return (
+      <EmptyState
+        title="Could not load your dashboard"
+        description={error}
+        action={
+          <button
+            type="button"
+            onClick={() => dispatch(getOverview())}
+            className="btn-primary"
+          >
+            Try again
+          </button>
+        }
+      />
+    );
+  }
 
-  const isAdmin = user?._id === user?.companyOwnerId; // TODO: backend doesn't send companyOwnerId yet — see gap 6
-  const isManager = (managing?.length ?? 0) > 0;
-  const isEmployee = (contributing?.length ?? 0) > 0;
+  if (!loaded) return <DashboardSkeleton />;
 
-  // Wait for the first fetch before deciding the empty state,
-  // otherwise every user briefly (or permanently, on backend error) flashes EmptyState.
-  if (loading && managing === null && contributing === null) return null;
+  const { roles } = data;
 
-  if (isAdmin) return <AdminOverview />;
+  if (roles.isAdmin) return <AdminOverview admin={data.admin} />;
 
-  if (isManager && isEmployee) return <HybridOverview />;
+  if (roles.isManager && roles.isEmployee) {
+    return <HybridOverview manager={data.manager} employee={data.employee} />;
+  }
 
-  if (isManager) return <ManagerOverview />;
+  if (roles.isManager) return <ManagerOverview data={data.manager} />;
 
-  if (isEmployee) return <EmployeeOverview />;
+  if (roles.isEmployee) return <EmployeeOverview data={data.employee} />;
 
-  return <EmptyState />;
+  return (
+    <EmptyState
+      title="No workspace activity yet"
+      description="You're not currently managing or contributing to any projects."
+    />
+  );
 }
 
-function EmptyState() {
+function DashboardSkeleton() {
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center py-20">
-      <h2 className="text-lg font-semibold text-text-primary">No workspace activity yet</h2>
-      <p className="text-sm text-text-secondary mt-1">
-        You're not currently managing or contributing to any projects.
-      </p>
+    <div className="space-y-5" role="status" aria-label="Loading dashboard">
+      <Skeleton className="h-8 w-48" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-28" />
+        ))}
+      </div>
     </div>
   );
 }

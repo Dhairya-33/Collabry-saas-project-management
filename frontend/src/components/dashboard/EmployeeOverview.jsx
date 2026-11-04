@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 
 export default function EmployeeOverview({ data, compact }) {
-  if (!data) return null;
-
   const navigate = useNavigate();
+
+  if (!data) return null;
 
   return (
     <div className="space-y-6">

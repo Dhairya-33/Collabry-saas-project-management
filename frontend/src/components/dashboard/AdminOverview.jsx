@@ -1,5 +1,4 @@
-import React, { memo, useMemo } from "react";
-import { useSelector } from "react-redux";
+import { memo, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   PieChart,
@@ -12,26 +11,23 @@ import {
   YAxis,
   Sector,
 } from "recharts";
-import {
-  Users,
-  FolderKanban,
-  AlertTriangle,
-  ArrowUpRight,
-} from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import CompanyInviteModal from "@/components/dashboard/CompanyInviteModal";
+import EmptyState from "@/components/ui/EmptyState";
 
 /* =========================================================
    MAIN
 ========================================================= */
 
-export default function AdminOverview() {
-  const {  loading } = useSelector((s) => s.overview);
-
-  if (loading) return <OverviewSkeleton />;
-  const data ={admin:{projects:{total:10,active:5,archived:5},tasks:{total:50,completed:30,inProgress:10,pending:5,overdue:5},members:{total:20}}}
-  if (!data?.admin) return null;
-
-  const admin = data.admin;
+export default function AdminOverview({ admin }) {
+  if (!admin) {
+    return (
+      <EmptyState
+        title="No data yet"
+        description="Company statistics will appear here."
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -54,10 +50,10 @@ export default function AdminOverview() {
 /* =========================================================
    HEADER
 ========================================================= */
-import { useState } from "react";
 
 const Header = memo(() => {
   const [inviteOpen, setInviteOpen] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <>
@@ -73,15 +69,20 @@ const Header = memo(() => {
 
         <div className="flex gap-3">
           <button
+            type="button"
             onClick={() => setInviteOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-[rgb(var(--color-brand-primary))] text-white text-sm font-medium hover:opacity-90 transition"
+            className="px-4 py-2.5 rounded-xl bg-[rgb(var(--color-brand-primary))] text-white text-sm font-medium hover:opacity-90 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-brand-secondary))]"
           >
             Invite Link
           </button>
 
           <button
+            type="button"
+            onClick={() =>
+              navigate("/projects/active", { state: { openCreate: true } })
+            }
             className="px-4 py-2.5 rounded-xl border border-[rgb(var(--color-border-subtle)/0.2)]
-            bg-white hover:bg-[rgb(var(--color-background-subtle))] transition text-sm font-medium"
+            bg-white hover:bg-[rgb(var(--color-background-subtle))] transition text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-brand-secondary))]"
           >
             Create Project
           </button>
@@ -99,6 +100,7 @@ const Header = memo(() => {
 /* =========================================================
    STATS GRID
 ========================================================= */
+
 const StatsGrid = memo(({ admin }) => {
   const navigate = useNavigate();
   const overdue = admin.tasks?.overdue ?? 0;
@@ -122,7 +124,7 @@ const StatsGrid = memo(({ admin }) => {
       <StatCard
         title="Total Members"
         value={admin.members?.total ?? 0}
-        onClick={() => navigate("/company/members")}
+        onClick={() => navigate("/members")}
       />
 
       <StatCard
@@ -134,14 +136,28 @@ const StatsGrid = memo(({ admin }) => {
     </div>
   );
 });
+
 const StatCard = memo(({ title, value, primary, danger, onClick }) => {
   const clickable = !!onClick;
 
   return (
     <div
       onClick={onClick}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
       className={`
         relative rounded-2xl p-5 border transition
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-brand-secondary))]
         ${
           primary
             ? "bg-[rgb(var(--color-brand-primary))] text-white border-[rgb(var(--color-brand-primary))]"
@@ -195,9 +211,9 @@ const StatCard = memo(({ title, value, primary, danger, onClick }) => {
         {value}
       </h2>
 
-      {!primary && (
+      {danger && (
         <p className="mt-2 text-xs text-[rgb(var(--color-text-muted))]">
-          {danger ? "Needs attention" : "Increased from last month"}
+          Needs attention
         </p>
       )}
 
@@ -332,18 +348,3 @@ const Card = memo(({ title, children }) => (
     </div>
   </div>
 ));
-
-/* =========================================================
-   SKELETON
-========================================================= */
-
-const OverviewSkeleton = () => (
-  <div className="space-y-5 animate-pulse">
-    <div className="h-6 w-32 bg-gray-200 rounded" />
-    <div className="grid grid-cols-4 gap-5">
-      {[...Array(4)].map((_, i) => (
-        <div key={i} className="h-24 bg-gray-200 rounded-2xl" />
-      ))}
-    </div>
-  </div>
-);

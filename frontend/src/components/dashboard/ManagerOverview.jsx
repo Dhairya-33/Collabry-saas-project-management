@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 
 export default function ManagerOverview({ data, compact }) {
-  if (!data) return null;
-
   const navigate = useNavigate();
+
+  if (!data) return null;
 
   return (
     <div className="space-y-6">
@@ -35,7 +35,7 @@ export default function ManagerOverview({ data, compact }) {
         <StatCard
           title="Pending Tasks"
           value={data.tasks.pending}
-          onClick={() => navigate("/projects")}
+          onClick={() => navigate("/projects/managing")}
         />
 
         <StatCard
