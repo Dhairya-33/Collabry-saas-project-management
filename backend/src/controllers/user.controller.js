@@ -21,6 +21,25 @@ const cookieOptions = {
   sameSite: isProd ? "none" : "lax",
 };
 
+// parses "15m" / "7d" / "3600000" (ms) the same way jsonwebtoken does
+const durationToMs = (value, fallbackMs) => {
+  if (typeof value !== "string") return fallbackMs;
+  const m = /^(\d+)\s*(ms|s|m|h|d|w)?$/i.exec(value.trim());
+  if (!m) return fallbackMs;
+  const unit = { ms: 1, s: 1000, m: 60000, h: 3600000, d: 86400000, w: 604800000 };
+  return Number(m[1]) * unit[(m[2] || "ms").toLowerCase()];
+};
+
+// without maxAge these are session cookies and vanish when the browser closes
+const accessCookieOptions = {
+  ...cookieOptions,
+  maxAge: durationToMs(process.env.ACCESSTKN_EXPIRESIN, 15 * 60 * 1000),
+};
+const refreshCookieOptions = {
+  ...cookieOptions,
+  maxAge: durationToMs(process.env.REFRESHTKN_EXPIRESIN, 7 * 24 * 60 * 60 * 1000),
+};
+
 const PASSWORD_RE = /^(?=.*[^A-Za-z0-9]).{8,}$/;
 const PASSWORD_MSG = "Password must be at least 8 characters and contain at least 1 symbol";
 
@@ -64,8 +83,8 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
   res
     .status(200)
-    .cookie("accessToken", accessTKN, cookieOptions)
-    .cookie("refreshToken", refreshTKN, cookieOptions)
+    .cookie("accessToken", accessTKN, accessCookieOptions)
+    .cookie("refreshToken", refreshTKN, refreshCookieOptions)
     .json({ status: "success" });
 });
 
@@ -83,7 +102,7 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Username must be 3-16 chars, only letters, numbers, _");
   }
 
-  const cleanEmail = email.trim();
+  const cleanEmail = email.trim().toLowerCase();
   const cleanUsername = username.trim();
 
   const existedUser = await User.findOne({
@@ -101,8 +120,8 @@ const registerUser = asyncHandler(async (req, res) => {
 
   res
     .status(201)
-    .cookie("accessToken", accessTKN, cookieOptions)
-    .cookie("refreshToken", refreshTKN, cookieOptions)
+    .cookie("accessToken", accessTKN, accessCookieOptions)
+    .cookie("refreshToken", refreshTKN, refreshCookieOptions)
     .json({
       status: "success",
       message: "user created successfully",
@@ -118,7 +137,7 @@ const loginUser = asyncHandler(async (req, res) => {
   if (!isNonEmptyString(password)) throw new ApiError(400, "password is required");
 
   const id = identifier.trim();
-  const user = await User.findOne({ $or: [{ email: id }, { username: id }] });
+  const user = await User.findOne({ $or: [{ email: id.toLowerCase() }, { username: id }] });
 
   // same response for unknown user and wrong password (no account enumeration)
   if (!user || !(await user.verifyPassword(password))) {
@@ -131,8 +150,8 @@ const loginUser = asyncHandler(async (req, res) => {
 
   res
     .status(200)
-    .cookie("accessToken", accessTKN, cookieOptions)
-    .cookie("refreshToken", refreshTKN, cookieOptions)
+    .cookie("accessToken", accessTKN, accessCookieOptions)
+    .cookie("refreshToken", refreshTKN, refreshCookieOptions)
     .json({
       status: "success",
       message: "user logged in successfully",
