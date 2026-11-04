@@ -1,13 +1,8 @@
 const initialOf = (user) =>
   (user?.fullname || user?.username || "U").trim().charAt(0).toUpperCase();
 
-const urlOf = (user) => {
-  const pic = user?.profilePic;
-  return typeof pic === "string" ? pic : pic?.url || null;
-};
-
 export default function Avatar({ user, className = "" }) {
-  const url = urlOf(user);
+  const url = user?.profilePictureUrl || null;
 
   return (
     <span
