@@ -1,20 +1,32 @@
 import express from "express";
-import  verifyJWT  from "../middlewares/jwt.middleware.js";
+import verifyJWT from "../middlewares/jwt.middleware.js";
+import { multerMiddleware } from "../middlewares/multer.middleware.js";
 import {
   getRoomMessages,
   deleteMessage,
-  getMyChatRooms
+  getMyChatRooms,
+  uploadChatFile,
+  ensureRoomAccess,
 } from "../controllers/chat.controller.js";
 
 const router = express.Router();
 
-// Get all messages of room
-router.get("/:roomId", verifyJWT, getRoomMessages);
+// rooms for the logged-in user (company, management, projects)
+router.get("/", verifyJWT, getMyChatRooms);
 
-// Delete a specific message
+// upload a file into a room (access is checked BEFORE the Cloudinary upload)
+router.post(
+  "/upload/:roomId",
+  verifyJWT,
+  ensureRoomAccess,
+  multerMiddleware.single("file"),
+  uploadChatFile
+);
+
+// delete a message
 router.delete("/message/:messageId", verifyJWT, deleteMessage);
 
-// Get all chat rooms for logged-in user (project rooms + company room)
-router.get("/", verifyJWT, getMyChatRooms);
+// message history: ?limit=50&before=<messageId>
+router.get("/:roomId", verifyJWT, getRoomMessages);
 
 export default router;
