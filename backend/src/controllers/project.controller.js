@@ -6,6 +6,7 @@ import { User } from "../models/user.model.js";
 import { Company } from "../models/company.model.js";
 import { ProjectInvite } from "../models/projectInvite.model.js";
 import { ProjectMember } from "../models/projectMember.model.js";
+import { revalidateUserRooms } from "../socket/socket.js";
 
 const createProject = asyncHandler(async (req,res) => {
     const { projectName, description,managerId} = req.body ?? {}; 
@@ -206,6 +207,8 @@ const removeEmployee = asyncHandler(async (req,res) => {
     throw new ApiError(404, "User is not an employee member of this project");
     }
 
+
+    void revalidateUserRooms(empId).catch(() => {});
 
     res.status(200).json({
         status:"success",

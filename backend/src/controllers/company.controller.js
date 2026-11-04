@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { Company } from "../models/company.model.js";
 import { User } from "../models/user.model.js";
 import { ProjectMember } from "../models/projectMember.model.js";
+import { revalidateUserRooms } from "../socket/socket.js";
 import { ProjectInvite } from "../models/projectInvite.model.js";
 import { Project } from "../models/project.model.js";
 import { Task } from "../models/task.model.js";
@@ -194,6 +195,8 @@ const removeCompanyMember = asyncHandler(async (req, res) => {
   user.companyId = null;
   await user.save();
 
+  void revalidateUserRooms(user._id).catch(() => {});
+
   res.status(200).json({
     status: "success",
     message: "User removed from company successfully",
@@ -212,6 +215,7 @@ const reassignProjectManager = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid projectId or newManagerUserId");
   }
 
+  let previousManagerId;
   const session = await mongoose.startSession();
 
   try {
@@ -297,9 +301,14 @@ const reassignProjectManager = asyncHandler(async (req, res) => {
       }
 
       // 3) Sync project reference
+      previousManagerId = project.managerId;
       project.managerId = newManagerUserId;
       await project.save({ session });
     });
+
+    for (const id of [previousManagerId, newManagerUserId]) {
+      if (id) void revalidateUserRooms(id).catch(() => {});
+    }
 
     res.status(200).json({
       success: true,
