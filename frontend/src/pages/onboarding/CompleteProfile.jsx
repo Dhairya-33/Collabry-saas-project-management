@@ -1,13 +1,12 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useDispatch, useSelector } from "react-redux";
-import { useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
-import { completeProfile, getCurrentUser } from "../../services/auth.service";
+import { completeProfile, getCurrentUser } from "@/services/auth.service";
+import { setUser } from "@/store/authSlice";
 
-export default function CompleteProfile(onsuccess) {
+export default function CompleteProfile() {
   const user = useSelector((s) => s.auth.user);
   const dispatch = useDispatch();
-  const navigate = useNavigate();
 
   const [preview, setPreview] = useState(null);
   const [skills, setSkills] = useState([]);
@@ -17,16 +16,25 @@ export default function CompleteProfile(onsuccess) {
   const {
     register,
     handleSubmit,
-    reset,
+    setError,
+    clearErrors,
     formState: { isSubmitting, errors, isSubmitted },
   } = useForm({
     mode: "onSubmit",
     reValidateMode: "onBlur",
-    defaultValues: {
-      username: user?.username || "testuser",
-      email: user?.email || "testEmail",
-    },
   });
+
+  // keep RHF's onChange and add the preview on top of it
+  const { onChange: onPicChange, ...picField } = register("profilePic", {
+    required: "Required",
+  });
+
+  const handlePicChange = (e) => {
+    onPicChange(e);
+    const file = e.target.files?.[0];
+    if (preview) URL.revokeObjectURL(preview);
+    setPreview(file ? URL.createObjectURL(file) : null);
+  };
 
   const addSkill = () => {
     const value = skillInput.trim();
@@ -46,22 +54,29 @@ export default function CompleteProfile(onsuccess) {
   };
 
   const onSubmit = async (data) => {
+    clearErrors("root");
+
     if (skills.length === 0) {
       setSkillsError("*Required");
       return;
     }
 
     const formData = new FormData();
-    formData.append("profilePic", data.profilePic?.[0]);
+    const pic = data.profilePic?.[0];
+    if (pic) formData.append("profilePic", pic);
     formData.append("fullname", data.fullname);
     formData.append("phone", data.phone);
     formData.append("bio", data.bio);
     formData.append("skills", skills.join(","));
 
-    await completeProfile(formData);
-    const res = await getCurrentUser(); 
-    dispatch(setUser(res.data));
-    onsuccess();
+    try {
+      await completeProfile(formData);
+      const res = await getCurrentUser();
+      // isProfileComplete flips to true and RequireProfileIncomplete redirects
+      dispatch(setUser(res.data));
+    } catch (err) {
+      setError("root", { message: err.message || "Could not save your profile" });
+    }
   };
 
   return (
@@ -86,9 +101,13 @@ export default function CompleteProfile(onsuccess) {
             <div className="flex gap-14 mb-10 items-start">
               {/* Profile photo */}
               <div className="flex flex-col items-center gap-2">
-                <div className="relative w-32 h-32 rounded-full border border-[rgb(var(--color-brand-accent))] bg-[rgb(var(--color-accent-muted))] overflow-hidden">
+                <div className="relative w-32 h-32 rounded-full border border-[rgb(var(--color-brand-accent))] bg-[rgb(var(--color-accent-muted))] overflow-hidden focus-within:ring-2 focus-within:ring-[rgb(var(--color-brand-secondary))]">
                   {preview ? (
-                    <img src={preview} className="w-full h-full object-cover" />
+                    <img
+                      src={preview}
+                      alt="Profile preview"
+                      className="w-full h-full object-cover"
+                    />
                   ) : (
                     <span className="absolute inset-0 flex items-center justify-center text-sm text-[rgb(var(--color-brand-secondary))]">
                       Upload photo
@@ -97,14 +116,9 @@ export default function CompleteProfile(onsuccess) {
                   <input
                     type="file"
                     accept="image/*"
-                    {...register("profilePic", {
-                      required: "Required",
-                    })}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      setPreview(URL.createObjectURL(file));
-                    }}
+                    aria-label="Profile photo"
+                    {...picField}
+                    onChange={handlePicChange}
                     className="absolute inset-0 opacity-0 cursor-pointer"
                   />
                 </div>
@@ -125,16 +139,16 @@ export default function CompleteProfile(onsuccess) {
                 <Field label="Username">
                   <input
                     readOnly
+                    value={user?.username ?? ""}
                     className="w-full px-4 py-2.5 rounded-lg bg-[rgb(var(--color-background-subtle))] border border-[rgb(var(--color-border-subtle)/0.04)] text-[rgb(var(--color-text-primary))] cursor-not-allowed"
-                    {...register("username")}
                   />
                 </Field>
 
                 <Field label="Email">
                   <input
                     readOnly
+                    value={user?.email ?? ""}
                     className="w-full px-4 py-2.5 rounded-lg bg-[rgb(var(--color-background-subtle))] border border-[rgb(var(--color-border-subtle)/0.04)] text-[rgb(var(--color-text-primary))] cursor-not-allowed"
-                    {...register("email")}
                   />
                 </Field>
 
@@ -165,7 +179,9 @@ export default function CompleteProfile(onsuccess) {
             {/* SKILLS */}
             <div className="mb-10">
               <div className="flex items-baseline justify-between min-h-[20px]">
-                <label className="label">Skills </label>
+                <label htmlFor="skill-input" className="label">
+                  Skills{" "}
+                </label>
                 <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">
                   {isSubmitted ? skillsError : ""}
                 </span>
@@ -173,6 +189,7 @@ export default function CompleteProfile(onsuccess) {
 
               <div className="flex gap-3 mt-2">
                 <input
+                  id="skill-input"
                   value={skillInput}
                   onChange={(e) => setSkillInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -187,6 +204,7 @@ export default function CompleteProfile(onsuccess) {
                 <button
                   type="button"
                   onClick={addSkill}
+                  aria-label="Add skill"
                   className="w-12 h-12 rounded-xl bg-[rgb(var(--color-brand-primary))] text-[rgb(var(--color-text-inverse))] text-xl"
                 >
                   +
@@ -203,6 +221,7 @@ export default function CompleteProfile(onsuccess) {
                     <button
                       type="button"
                       onClick={() => removeSkill(skill)}
+                      aria-label={`Remove ${skill}`}
                       className="hover:text-black"
                     >
                       ×
@@ -224,10 +243,20 @@ export default function CompleteProfile(onsuccess) {
               />
             </Field>
 
+            {errors.root && (
+              <p
+                role="alert"
+                className="mt-6 text-sm text-[rgb(var(--color-status-error))]"
+              >
+                {errors.root.message}
+              </p>
+            )}
+
             {/* Submit */}
             <button
+              type="submit"
               disabled={isSubmitting}
-              className="w-full h-12 rounded-xl bg-[rgb(var(--color-brand-primary))] text-[rgb(var(--color-text-inverse))] font-medium transition disabled:opacity-60"
+              className="mt-6 w-full h-12 rounded-xl bg-[rgb(var(--color-brand-primary))] text-[rgb(var(--color-text-inverse))] font-medium transition disabled:opacity-60"
             >
               {isSubmitting ? "Saving..." : "Save & Continue"}
             </button>
