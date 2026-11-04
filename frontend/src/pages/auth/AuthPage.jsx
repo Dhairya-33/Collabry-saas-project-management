@@ -32,7 +32,7 @@ export default function AuthPage() {
 
       dispatch(setUser(res.data));
 
-      // ✅ NO navigation (handled by AuthLayout + Redux state)
+      // ✅ NO navigation (route guards redirect once the user is set)
 
     } catch (err) {
       const message = err.message?.toLowerCase() || "";
