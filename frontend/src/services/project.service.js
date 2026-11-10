@@ -18,3 +18,8 @@ export const fetchContributingProjects = async () => (await api.get("/project/my
 /* ===== ANY MEMBER ===== */
 // body.data: { project, role, manager }
 export const getProject = async (projectId) => (await api.get(`/project/${projectId}`)).data;
+
+// body.data: invite
+export const createProjectInvite = async (data) =>
+  (await api.post("/project/invite", data)).data; // { inviteeId, projectId }
+export const createProjectInviteService = createProjectInvite;

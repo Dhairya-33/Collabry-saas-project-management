@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { Link } from "react-router-dom";
 import { Archive, AlertCircle, FolderKanban, Plus, RefreshCw, RotateCcw, Search } from "lucide-react";
 import {
   getAllProjects,
@@ -266,7 +267,12 @@ export default function ProjectListPage({ mode = "active" }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="break-words text-base font-semibold text-text-primary">
-                    {getProjectLabel(project)}
+                    <Link
+                      to={`/projects/${project._id}`}
+                      className="transition hover:text-brand-primary"
+                    >
+                      {getProjectLabel(project)}
+                    </Link>
                   </h2>
                   <p className="mt-1 text-xs text-text-secondary">
                     {project.createdAt

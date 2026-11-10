@@ -10,6 +10,7 @@ import CompanySetup from "@/pages/company-setup/Index";
 import CompleteProfilePage from "@/pages/onboarding/CompleteProfilePage";
 import ComingSoon from "@/pages/placeholder/ComingSoon";
 import ProjectListPage from "@/pages/projects/ProjectListPage";
+import ProjectDetailPage from "@/pages/projects/ProjectDetailPage";
 import Skeleton from "@/components/ui/Skeleton";
 import { EnterpriseLoader } from "@/pages/loader/Loader";
 
@@ -142,6 +143,9 @@ export default function AppRoutes() {
 
               <Route path="/chat" element={<ComingSoon title="Chat" />} />
               <Route path="/settings" element={<ComingSoon title="Settings" />} />
+
+              {/* Project detail — open to any company member; backend enforces project membership */}
+              <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
             </Route>
           </Route>
 
