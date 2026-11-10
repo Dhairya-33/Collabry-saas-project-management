@@ -417,7 +417,7 @@ const getemployeeProjects = asyncHandler(async (req,res) => {
     })
     .populate({
     path: "projectId",
-    select: "projectName description archived"
+    select: "projectName description archived createdAt"
     })
     .select("projectId -_id");
 
@@ -444,7 +444,7 @@ const getManagerProjects = asyncHandler(async (req,res) => {
         throw new ApiError(404,"Company not found");
     }
     const projects = await Project.find({ companyId: user.companyId, managerId: user._id })
-        .select("projectName description archived");
+        .select("projectName description archived createdAt");
 
     res.status(200).json({
         status:"success",

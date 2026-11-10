@@ -4,6 +4,9 @@ import {
   fetchManagingProjects,
   fetchContributingProjects,
   fetchArchivedProjects,
+  createProject as createProjectService,
+  archiveProject as archiveProjectService,
+  fetchProjectEmployees as fetchProjectEmployeesService,
 } from "@/services/project.service";
 import { clearUser } from "./authSlice";
 
@@ -23,6 +26,40 @@ export const getAllProjects = makeThunk("projects/getAll", fetchAllProjects, "Fa
 export const getManagingProjects = makeThunk("projects/getManaging", fetchManagingProjects, "Failed to load managing projects");
 export const getContributingProjects = makeThunk("projects/getContributing", fetchContributingProjects, "Failed to load contributing projects");
 export const getArchivedProjects = makeThunk("projects/getArchived", fetchArchivedProjects, "Failed to load archived projects");
+
+// Mutation thunks — callers can dispatch these and unwrap() the result
+export const createProjectThunk = createAsyncThunk(
+  "projects/create",
+  async (payload, { rejectWithValue }) => {
+    try {
+      return await createProjectService(payload);
+    } catch (err) {
+      return rejectWithValue(err?.message || "Failed to create project");
+    }
+  }
+);
+
+export const archiveProjectThunk = createAsyncThunk(
+  "projects/archive",
+  async (payload, { rejectWithValue }) => {
+    try {
+      return await archiveProjectService(payload);
+    } catch (err) {
+      return rejectWithValue(err?.message || "Failed to update project");
+    }
+  }
+);
+
+export const fetchProjectMembersThunk = createAsyncThunk(
+  "projects/fetchMembers",
+  async (payload, { rejectWithValue }) => {
+    try {
+      return await fetchProjectEmployeesService(payload);
+    } catch (err) {
+      return rejectWithValue(err?.message || "Failed to fetch project members");
+    }
+  }
+);
 
 const initialState = {
   all: null,

@@ -14,9 +14,9 @@ import {
 } from "recharts";
 import { ArrowUpRight } from "lucide-react";
 import CompanyInviteModal from "@/components/dashboard/CompanyInviteModal";
-import { createProject } from "@/services/project.service";
-import { fetchCompanyMembers } from "@/services/company.service";
 import { getOverview } from "@/store/overviewSlice";
+import { getAllProjects } from "@/store/projectSlice";
+import CreateProjectModal from "@/components/projects/CreateProjectModal";
 import EmptyState from "@/components/ui/EmptyState";
 
 /* =========================================================
@@ -59,96 +59,26 @@ const Header = memo(() => {
   const dispatch = useDispatch();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [members, setMembers] = useState([]);
-  const [membersLoading, setMembersLoading] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [projectName, setProjectName] = useState("");
-  const [description, setDescription] = useState("");
-  const [managerId, setManagerId] = useState("");
-  const [createError, setCreateError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  const openCreateProject = async () => {
-    setCreateOpen(true);
-    setCreateError("");
-    setSuccessMessage("");
-    setMembersLoading(true);
-    try {
-      const response = await fetchCompanyMembers();
-      const companyMembers = Array.isArray(response?.data?.members)
-        ? response.data.members
-        : [];
-      setMembers(companyMembers);
-      setManagerId((current) =>
-        current && companyMembers.some((member) => member._id === current)
-          ? current
-          : companyMembers[0]?._id || ""
-      );
-      if (companyMembers.length === 0) {
-        setCreateError("No company members are available to assign as project manager.");
-      }
-    } catch (error) {
-      setMembers([]);
-      setCreateError(error?.message || "Could not load company members.");
-    } finally {
-      setMembersLoading(false);
-    }
-  };
-
-  const closeCreateProject = () => {
-    if (creating) return;
-    setCreateOpen(false);
-    setCreateError("");
-    setProjectName("");
-    setDescription("");
-    setManagerId("");
-  };
-
-  const submitCreateProject = async (event) => {
-    event.preventDefault();
-    const normalizedName = projectName.trim();
-    if (!normalizedName) {
-      setCreateError("Project name is required.");
-      return;
-    }
-    if (!managerId || !members.some((member) => member._id === managerId)) {
-      setCreateError("Select a valid project manager from your company.");
-      return;
-    }
-
-    setCreating(true);
-    setCreateError("");
-    try {
-      await createProject({
-        projectName: normalizedName,
-        description: description.trim(),
-        managerId,
-      });
-      dispatch(getOverview());
-      setCreateOpen(false);
-      setProjectName("");
-      setDescription("");
-      setManagerId("");
-      setSuccessMessage(`Project "${normalizedName}" created successfully.`);
-    } catch (error) {
-      setCreateError(error?.message || "Could not create the project.");
-    } finally {
-      setCreating(false);
-    }
+  const handleCreated = async (name) => {
+    setSuccessMessage(`Project "${name}" created successfully.`);
+    dispatch(getOverview());
+    dispatch(getAllProjects());
   };
 
   return (
     <>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
         <div>
-          <h1 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">
+          <h1 className="text-2xl font-semibold text-text-primary">
             Dashboard
           </h1>
-          <p className="text-sm text-[rgb(var(--color-text-secondary))] mt-1">
+          <p className="text-sm text-text-secondary mt-1">
             Company performance and operational overview.
           </p>
           {successMessage && (
-            <p role="status" className="mt-2 text-sm text-[rgb(var(--color-status-success))]">
+            <p role="status" className="mt-2 text-sm text-status-success">
               {successMessage}
             </p>
           )}
@@ -158,15 +88,15 @@ const Header = memo(() => {
           <button
             type="button"
             onClick={() => setInviteOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-[rgb(var(--color-brand-primary))] text-white text-sm font-medium hover:opacity-90 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-brand-secondary))]"
+            className="px-4 py-2.5 rounded-full bg-brand-primary text-text-inverse text-sm font-medium hover:opacity-90 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
           >
             Invite Link
           </button>
 
           <button
             type="button"
-            onClick={openCreateProject}
-            className="px-4 py-2.5 rounded-xl border border-[rgb(var(--color-border-subtle)/0.2)] bg-white hover:bg-[rgb(var(--color-background-subtle))] transition text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-brand-secondary))]"
+            onClick={() => { setSuccessMessage(""); setCreateOpen(true); }}
+            className="px-4 py-2.5 rounded-full border border-border bg-surface-base hover:bg-background-subtle transition text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
           >
             Create Project
           </button>
@@ -178,109 +108,11 @@ const Header = memo(() => {
         onClose={() => setInviteOpen(false)}
       />
 
-      {createOpen && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeCreateProject();
-          }}
-        >
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="create-project-title"
-            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl"
-          >
-            <div className="mb-5">
-              <h2 id="create-project-title" className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
-                Create project
-              </h2>
-              <p className="mt-1 text-sm text-[rgb(var(--color-text-secondary))]">
-                Set up a project and assign a manager from your company.
-              </p>
-            </div>
-
-            <form onSubmit={submitCreateProject} className="space-y-4">
-              <div>
-                <label htmlFor="new-project-name" className="mb-1.5 block text-sm font-medium text-[rgb(var(--color-text-primary))]">
-                  Project name
-                </label>
-                <input
-                  id="new-project-name"
-                  value={projectName}
-                  onChange={(event) => setProjectName(event.target.value)}
-                  maxLength={120}
-                  required
-                  autoFocus
-                  className="input w-full"
-                  placeholder="Enter project name"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="new-project-description" className="mb-1.5 block text-sm font-medium text-[rgb(var(--color-text-primary))]">
-                  Description
-                </label>
-                <textarea
-                  id="new-project-description"
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  rows={3}
-                  className="textarea w-full"
-                  placeholder="Add a short project description (optional)"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="new-project-manager" className="mb-1.5 block text-sm font-medium text-[rgb(var(--color-text-primary))]">
-                  Project manager
-                </label>
-                <select
-                  id="new-project-manager"
-                  value={managerId}
-                  onChange={(event) => setManagerId(event.target.value)}
-                  disabled={membersLoading || members.length === 0}
-                  required
-                  className="input w-full"
-                >
-                  <option value="">
-                    {membersLoading ? "Loading company members..." : "Select a manager"}
-                  </option>
-                  {members.map((member) => (
-                    <option key={member._id} value={member._id}>
-                      {member.fullname || member.username || member.email}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {createError && (
-                <p role="alert" className="text-sm text-[rgb(var(--color-status-error))]">
-                  {createError}
-                </p>
-              )}
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={closeCreateProject}
-                  disabled={creating}
-                  className="rounded-xl border border-[rgb(var(--color-border-subtle)/0.2)] px-4 py-2 text-sm disabled:opacity-60"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating || membersLoading || members.length === 0 || !managerId}
-                  className="rounded-xl bg-[rgb(var(--color-brand-primary))] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-                >
-                  {creating ? "Creating..." : "Create project"}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
-      )}
+      <CreateProjectModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={handleCreated}
+      />
     </>
   );
 });
