@@ -9,6 +9,7 @@ import DashboardResolver from "@/components/dashboard/DashboardResolver";
 import CompanySetup from "@/pages/company-setup/Index";
 import CompleteProfilePage from "@/pages/onboarding/CompleteProfilePage";
 import ComingSoon from "@/pages/placeholder/ComingSoon";
+import ProjectListPage from "@/pages/projects/ProjectListPage";
 import Skeleton from "@/components/ui/Skeleton";
 import { EnterpriseLoader } from "@/pages/loader/Loader";
 
@@ -113,11 +114,11 @@ export default function AppRoutes() {
               <Route element={<RequireRole allow={["isAdmin"]} />}>
                 <Route
                   path="/projects/active"
-                  element={<ComingSoon title="Active projects" />}
+                  element={<ProjectListPage mode="active" />}
                 />
                 <Route
                   path="/projects/archived"
-                  element={<ComingSoon title="Archived projects" />}
+                  element={<ProjectListPage mode="archived" />}
                 />
                 <Route
                   path="/members"
@@ -128,14 +129,14 @@ export default function AppRoutes() {
               <Route element={<RequireRole allow={["isManager"]} />}>
                 <Route
                   path="/projects/managing"
-                  element={<ComingSoon title="Managing projects" />}
+                  element={<ProjectListPage mode="managing" />}
                 />
               </Route>
 
               <Route element={<RequireRole allow={["isEmployee"]} />}>
                 <Route
                   path="/projects/contributing"
-                  element={<ComingSoon title="Contributing projects" />}
+                  element={<ProjectListPage mode="contributing" />}
                 />
               </Route>
 
