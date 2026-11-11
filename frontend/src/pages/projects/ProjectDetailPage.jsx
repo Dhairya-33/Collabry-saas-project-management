@@ -24,6 +24,7 @@ import Skeleton from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { getCompanyMembers } from "@/store/memberSlice";
+import ManagerTasksPanel from "@/components/tasks/ManagerTasksPanel";
 
 /* ── helpers ──────────────────────────────────────────── */
 const ROLE_LABEL = { admin: "Admin", manager: "Manager", employee: "Employee" };
@@ -683,6 +684,11 @@ export default function ProjectDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Manager tasks — only for admin or manager */}
+      {canManage(role) && (
+        <ManagerTasksPanel projectId={projectId} />
+      )}
 
       {/* Members — only for admin or manager */}
       {canManage(role) && (
