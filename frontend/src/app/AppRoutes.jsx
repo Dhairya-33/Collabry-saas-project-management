@@ -11,6 +11,8 @@ import CompleteProfilePage from "@/pages/onboarding/CompleteProfilePage";
 import ComingSoon from "@/pages/placeholder/ComingSoon";
 import ProjectListPage from "@/pages/projects/ProjectListPage";
 import ProjectDetailPage from "@/pages/projects/ProjectDetailPage";
+import MembersPage from "@/pages/members/MembersPage";
+import SettingsPage from "@/pages/settings/SettingsPage";
 import Skeleton from "@/components/ui/Skeleton";
 import { EnterpriseLoader } from "@/pages/loader/Loader";
 
@@ -123,7 +125,7 @@ export default function AppRoutes() {
                 />
                 <Route
                   path="/members"
-                  element={<ComingSoon title="Members" />}
+                  element={<MembersPage />}
                 />
               </Route>
 
@@ -142,7 +144,7 @@ export default function AppRoutes() {
               </Route>
 
               <Route path="/chat" element={<ComingSoon title="Chat" />} />
-              <Route path="/settings" element={<ComingSoon title="Settings" />} />
+              <Route path="/settings" element={<SettingsPage />} />
 
               {/* Project detail — open to any company member; backend enforces project membership */}
               <Route path="/projects/:projectId" element={<ProjectDetailPage />} />

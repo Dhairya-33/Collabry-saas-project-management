@@ -1,5 +1,10 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { fetchCompanyMembers } from "@/services/company.service";
+import {
+  fetchCompanyMembers,
+  removeCompanyMember,
+  fetchCompanyInviteToken,
+  reassignProjectManager,
+} from "@/services/company.service";
 import { clearUser } from "./authSlice";
 
 export const getCompanyMembers = createAsyncThunk(
@@ -14,13 +19,58 @@ export const getCompanyMembers = createAsyncThunk(
   }
 );
 
-const initialState = { data: null, loading: false, error: null };
+export const removeCompanyMemberThunk = createAsyncThunk(
+  "members/removeMember",
+  async ({ userId }, { rejectWithValue }) => {
+    try {
+      return await removeCompanyMember({ userId });
+    } catch (err) {
+      return rejectWithValue(err?.message || "Failed to remove member");
+    }
+  }
+);
+export const removeMember = removeCompanyMemberThunk;
+
+export const generateCompanyInviteThunk = createAsyncThunk(
+  "members/generateInvite",
+  async (_, { rejectWithValue }) => {
+    try {
+      return await fetchCompanyInviteToken();
+    } catch (err) {
+      return rejectWithValue(err?.message || "Failed to generate invite token");
+    }
+  }
+);
+export const generateCompanyInvite = generateCompanyInviteThunk;
+
+export const reassignProjectManagerThunk = createAsyncThunk(
+  "members/reassignProjectManager",
+  async ({ projectId, newManagerUserId }, { rejectWithValue }) => {
+    try {
+      return await reassignProjectManager({ projectId, newManagerUserId });
+    } catch (err) {
+      return rejectWithValue(err?.message || "Failed to reassign manager");
+    }
+  }
+);
+export const reassignProjectManagerAction = reassignProjectManagerThunk;
+
+const initialState = {
+  data: null,
+  loading: false,
+  error: null,
+  actionLoading: false,
+  actionError: null,
+};
 
 const membersSlice = createSlice({
   name: "members",
   initialState,
   reducers: {
     clearMembers: () => initialState,
+    clearMemberActionError: (state) => {
+      state.actionError = null;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -36,9 +86,20 @@ const membersSlice = createSlice({
         state.loading = false;
         state.error = action.payload || action.error?.message || "Request failed";
       })
+      .addCase(removeCompanyMemberThunk.pending, (state) => {
+        state.actionLoading = true;
+        state.actionError = null;
+      })
+      .addCase(removeCompanyMemberThunk.fulfilled, (state) => {
+        state.actionLoading = false;
+      })
+      .addCase(removeCompanyMemberThunk.rejected, (state, action) => {
+        state.actionLoading = false;
+        state.actionError = action.payload || action.error?.message || "Failed to remove member";
+      })
       .addCase(clearUser, () => initialState);
   },
 });
 
-export const { clearMembers } = membersSlice.actions;
+export const { clearMembers, clearMemberActionError } = membersSlice.actions;
 export default membersSlice.reducer;
