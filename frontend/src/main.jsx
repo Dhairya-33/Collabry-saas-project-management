@@ -7,11 +7,13 @@ import App from "./App";
 import store from "./store/store.js";
 import { clearUser } from "./store/authSlice";
 import { setAuthFailureHandler } from "./lib/axios";
+import { initSocketLifecycle } from "./lib/socket";
 
 import "./styles/app.css";
 
 // when a token refresh is rejected, drop the user so route guards send them to /auth
 setAuthFailureHandler(() => store.dispatch(clearUser()));
+initSocketLifecycle(store);
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

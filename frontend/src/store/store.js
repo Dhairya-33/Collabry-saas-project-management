@@ -6,6 +6,7 @@ import projectReducer from "./projectSlice";
 import memberReducer from "./memberSlice";
 import inviteReducer from "./projectInviteSlice";
 import taskReducer from "./taskSlice";
+import chatReducer from "./chatSlice";
 
 const store = configureStore({
  reducer: {
@@ -16,6 +17,7 @@ const store = configureStore({
     members: memberReducer,
     invites: inviteReducer,
     tasks: taskReducer,
+    chat: chatReducer,
   },
 });
 export default store;

@@ -9,6 +9,7 @@ import DashboardResolver from "@/components/dashboard/DashboardResolver";
 import CompanySetup from "@/pages/company-setup/Index";
 import CompleteProfilePage from "@/pages/onboarding/CompleteProfilePage";
 import ComingSoon from "@/pages/placeholder/ComingSoon";
+import ChatPage from "@/pages/chat/ChatPage";
 import ProjectListPage from "@/pages/projects/ProjectListPage";
 import ProjectDetailPage from "@/pages/projects/ProjectDetailPage";
 import MembersPage from "@/pages/members/MembersPage";
@@ -143,7 +144,7 @@ export default function AppRoutes() {
                 />
               </Route>
 
-              <Route path="/chat" element={<ComingSoon title="Chat" />} />
+              <Route path="/chat" element={<ChatPage />} />
               <Route path="/settings" element={<SettingsPage />} />
 
               {/* Project detail — open to any company member; backend enforces project membership */}
