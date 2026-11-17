@@ -12,6 +12,9 @@ export default {
           secondary: "rgb(var(--color-brand-secondary) / <alpha-value>)",
           accent: "rgb(var(--color-brand-accent) / <alpha-value>)",
         },
+        accent: {
+          muted: "rgb(var(--color-accent-muted) / <alpha-value>)",
+        },
 
         /* ===============================
            BACKGROUNDS
