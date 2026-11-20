@@ -1,133 +1,187 @@
-import {asyncHandler} from "../utils/asyncHandler.js";
+import mongoose from "mongoose";
+import { asyncHandler } from "../utils/asyncHandler.js";
+import { ApiError } from "../utils/apiError.js";
 import { Chat } from "../models/chat.model.js";
 import { ProjectMember } from "../models/projectMember.model.js";
-import mongoose from "mongoose";
-import { Project } from "../models/project.model.js";
-import { ApiError } from "../utils/apiError.js";
+import { getIO } from "../socket/socket.js";
+import {
+  OID_RE,
+  companyRoomId,
+  managementRoomId,
+  getRoomAccess,
+} from "../utils/chatRooms.js";
+
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 100;
+
+const DELETE_DENIED = {
+  company: "Only the company owner can delete messages in the general chat",
+  management: "Only the company owner can delete messages in the management chat",
+  project: "Only project manager/admin can delete messages in this room",
+};
+
+const assertReadable = (access) => {
+  if (access.type === "invalid") throw new ApiError(400, "Invalid room");
+  if (access.notFound) throw new ApiError(404, "Room not found");
+  if (!access.canRead) throw new ApiError(403, "You are not allowed to access this room");
+};
 
 /**
- * Get all messages for a room (company or project chat)
+ * Route middleware: run BEFORE multer so non-members cannot push files to Cloudinary.
  */
- const getRoomMessages = asyncHandler(async (req, res) => {
-  const userId = req.user._id;
+const ensureRoomAccess = asyncHandler(async (req, res, next) => {
+  const access = await getRoomAccess(req.user, req.params.roomId);
+  assertReadable(access);
+  next();
+});
+
+/**
+ * GET /api/chat/:roomId?limit=50&before=<messageId>
+ * Returns messages oldest -> newest. Use pagination.nextBefore to load older ones.
+ */
+const getRoomMessages = asyncHandler(async (req, res) => {
   const { roomId } = req.params;
 
-  if (!roomId) throw new ApiError(400, "Room ID is required");
+  const access = await getRoomAccess(req.user, roomId);
+  assertReadable(access);
 
-  const isMongoId = mongoose.isValidObjectId(roomId);
+  const rawLimit =
+    typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : NaN;
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(Math.max(rawLimit, 1), MAX_LIMIT)
+    : DEFAULT_LIMIT;
 
-  let isAllowed = false;
-
-  /**
-   * AUTH RULES:
-   * ----------------------------------------------------
-   * 1. If roomId is a COMPANY ID → allow if user's companyId matches
-   * 2. If roomId is a PROJECT ID → allow only if user is member of that project
-   */
-  
-  // Case 1: roomId is company-level room
-  if (!isMongoId) {
-    // Example company rooms: "company_12345"
-    const companyRoomPrefix = `company_${req.user.companyId}`;
-
-    if (roomId === companyRoomPrefix) {
-      isAllowed = true;
+  const filter = { room: roomId };
+  if (req.query.before !== undefined) {
+    if (typeof req.query.before !== "string" || !OID_RE.test(req.query.before)) {
+      throw new ApiError(400, "Invalid 'before' cursor");
     }
-  } 
-  else {
-    // Case 2: Project-level room
-    const membership = await ProjectMember.findOne({
-      projectId: roomId,
-      userId,
-    });
-
-    if (membership) isAllowed = true;
+    filter._id = { $lt: req.query.before };
   }
 
-  if (!isAllowed) {
-    throw new ApiError(403, "You are not allowed to access this room");
-  }
+  const page = await Chat.find(filter)
+    .sort({ _id: -1 })
+    .limit(limit + 1)
+    .lean();
 
-  // Fetch messages
-  const messages = await Chat.find({ room: roomId }).sort({ createdAt: 1 });
+  const hasMore = page.length > limit;
+  if (hasMore) page.pop();
+  page.reverse();
 
-  return res.status(200).json({
-    status: "success",
-    message: "Messages fetched successfully",
-    data: messages,
-  });
-});
-
-//  GET CHAT ROOMS FOR LOGGED-IN USER
-//  (Company General Chat + All Project Rooms)
- const getMyChatRooms = asyncHandler(async (req, res) => {
-  const user = req.user;
-
-  // 1️⃣ Get all project rooms this user belongs to
-  const memberships = await ProjectMember.find({ userId: user._id }).populate(
-    "projectId",
-    "projectName"
-  );
-
-  const projectRooms = memberships.map((m) => ({
-    roomId: m.projectId._id,
-    name: m.projectId.projectName,
-    type: "project",
-  }));
-
-  // 2️⃣ Add general company chat
-  const generalRoom = {
-    roomId: user.companyId,
-    name: "General Company Chat",
-    type: "company",
-  };
-
-  // 3️⃣ Return all rooms
   res.status(200).json({
     status: "success",
-    data: [generalRoom, ...projectRooms],
+    message: "Messages fetched successfully",
+    data: page,
+    pagination: {
+      limit,
+      hasMore,
+      nextBefore: hasMore ? page[0]._id : null,
+    },
   });
 });
 
+/**
+ * GET /api/chat  - rooms for the logged-in user
+ * (company general chat, management chat if allowed, project chats)
+ */
+const getMyChatRooms = asyncHandler(async (req, res) => {
+  const user = req.user;
 
+  if (!user.companyId) {
+    return res.status(200).json({ status: "success", data: [] });
+  }
+
+  const rooms = [
+    {
+      roomId: companyRoomId(user.companyId),
+      name: "General Company Chat",
+      type: "company",
+    },
+  ];
+
+  const mgmtId = managementRoomId(user.companyId);
+  const mgmt = await getRoomAccess(user, mgmtId);
+  if (mgmt.canRead) {
+    rooms.push({ roomId: mgmtId, name: "Management Chat", type: "management" });
+  }
+
+  const memberships = await ProjectMember.find({
+    userId: user._id,
+    companyId: user.companyId,
+  }).populate("projectId", "projectName");
+
+  const projectRooms = memberships
+    .filter((m) => m.projectId)
+    .map((m) => ({
+      roomId: m.projectId._id.toString(),
+      name: m.projectId.projectName,
+      type: "project",
+    }));
+
+  res.status(200).json({
+    status: "success",
+    data: [...rooms, ...projectRooms],
+  });
+});
+
+/**
+ * POST /api/chat/upload/:roomId  (multipart, field "file")
+ * Stores the file on Cloudinary, saves a chat message and broadcasts "fileShared".
+ */
+const uploadChatFile = asyncHandler(async (req, res) => {
+  const { roomId } = req.params;
+  const user = req.user;
+
+  if (!req.file?.path) throw new ApiError(400, "File is required");
+
+  const saved = await Chat.create({
+    room: roomId,
+    sender: user._id,
+    senderName: user.fullname || user.username,
+    fileUrl: req.file.path,
+  });
+
+  const payload = {
+    _id: saved._id,
+    room: saved.room,
+    sender: saved.sender,
+    senderName: saved.senderName,
+    fileUrl: saved.fileUrl,
+    createdAt: saved.createdAt,
+  };
+
+  getIO()?.to(roomId).emit("fileShared", payload);
+
+  res.status(201).json({
+    status: "success",
+    message: "File shared successfully",
+    data: payload,
+  });
+});
+
+/**
+ * DELETE /api/chat/message/:messageId
+ */
 const deleteMessage = asyncHandler(async (req, res) => {
   const { messageId } = req.params;
-  const userId = req.user._id;
 
   if (!mongoose.isValidObjectId(messageId)) {
     throw new ApiError(400, "Invalid messageId");
   }
 
   const message = await Chat.findById(messageId);
-
   if (!message) throw new ApiError(404, "Message not found");
 
-  const project = await Project.findById(message.room);
-  if (project) {
-    // Room is a project room → check manager/admin role
-    const member = await ProjectMember.findOne({
-      projectId: project._id,
-      userId,
-      role: { $in: ["manager", "admin"] },
-    });
+  const roomId = message.room;
+  const access = await getRoomAccess(req.user, roomId);
 
-    if (!member) {
-      throw new ApiError(
-        403,
-        "Only project manager/admin can delete messages in this room"
-      );
-    }
-  } else {
-    // Room = Company General Chat
-    if (req.user.role !== "admin") {
-      throw new ApiError(
-        403,
-        "Only admin can delete messages in company general chat"
-      );
-    }
-  }
+  if (access.type === "invalid") throw new ApiError(400, "Invalid room reference");
+  if (access.notFound) throw new ApiError(404, "Room not found");
+  if (!access.canDelete) throw new ApiError(403, DELETE_DENIED[access.type]);
 
   await Chat.findByIdAndDelete(messageId);
+
+  getIO()?.to(roomId).emit("messageDeleted", { _id: message._id, room: roomId });
 
   res.status(200).json({
     status: "success",
@@ -135,5 +189,10 @@ const deleteMessage = asyncHandler(async (req, res) => {
   });
 });
 
-
-export { getRoomMessages, getMyChatRooms,deleteMessage };
+export {
+  getRoomMessages,
+  getMyChatRooms,
+  deleteMessage,
+  uploadChatFile,
+  ensureRoomAccess,
+};

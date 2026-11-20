@@ -1,139 +1,167 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
+import { parse } from "cookie";
 import { User } from "../models/user.model.js";
-import { ProjectMember } from "../models/projectMember.model.js"; 
-import { Chat } from "../models/chat.model.js"; 
-import { configDotenv } from "dotenv";
-configDotenv({})
+import { Chat } from "../models/chat.model.js";
+import {
+  OID_RE,
+  parseRoomId,
+  companyRoomId,
+  managementRoomId,
+  getRoomAccess,
+} from "../utils/chatRooms.js";
+import { isOwnedChatUpload } from "../utils/cloudinaryOwnership.js";
 
-let io; 
+let io;
+
+export const getIO = () => io;
+
+// every socket joins this private room so we can find all of one user's sockets
+const userRoom = (id) => `user_${id}`;
+
+// how long a positive access decision is trusted for one socket + room
+const ACCESS_TTL_MS = 15_000;
+
+// simple per-socket limiter: max `max` events per `windowMs`
+const makeLimiter = (max, windowMs) => {
+  let count = 0;
+  let resetAt = Date.now() + windowMs;
+  return () => {
+    const now = Date.now();
+    if (now > resetAt) {
+      count = 0;
+      resetAt = now + windowMs;
+    }
+    count += 1;
+    return count <= max;
+  };
+};
+
+/**
+ * Call after anything that can remove or downgrade access (member removed, manager
+ * reassigned, user removed from company). Re-checks every chat room of every socket
+ * that user has open and kicks them out of rooms they may no longer read.
+ */
+export const revalidateUserRooms = async (userId) => {
+  if (!io || !userId) return;
+
+  const sockets = await io.in(userRoom(userId)).fetchSockets();
+  if (sockets.length === 0) return;
+
+  const me = await User.findById(userId).select("_id companyId");
+
+  for (const s of sockets) {
+    for (const room of [...s.rooms]) {
+      if (parseRoomId(room).type === "invalid") continue; // socket id, user_ room
+      const access = me ? await getRoomAccess(me, room) : null;
+      if (!access || !access.canRead || access.notFound) {
+        s.leave(room);
+        s.emit("roomRevoked", room);
+      }
+    }
+  }
+};
 
 export const initSocket = (httpServer) => {
   io = new Server(httpServer, {
     cors: {
-      origin: process.env.CLIENT_URL || "*", // e.g. http://localhost:5173
+      origin: process.env.FRONTEND_URL,
       methods: ["GET", "POST"],
       credentials: true,
     },
   });
 
-  // 1) Authenticate every socket at handshake time
+  // Auth from the httpOnly accessToken cookie (client: io(url, { withCredentials: true }))
   io.use(async (socket, next) => {
     try {
-      // Frontend should connect like: io(BASE_URL, { auth: { token } })
-      const token =
-        socket.handshake.auth?.token ||
-        socket.handshake.headers?.authorization?.replace("Bearer ", "");
-
+      const cookies = parse(socket.handshake.headers.cookie || "");
+      const token = cookies.accessToken;
       if (!token) throw new Error("No token provided");
 
       const decoded = jwt.verify(token, process.env.ACCESSTKN_KEY);
-
-      const userId = decoded?._id || decoded?.this_id;
-      if (!userId) throw new Error("Invalid token payload");
-
-      const user = await User.findById(userId).select(
-        "_id fullname email companyId"
-      );
+      const user = await User.findById(decoded?._id).select("_id fullname username email companyId");
       if (!user) throw new Error("User not found");
 
-      socket.user = user; 
+      socket.user = user;
       next();
     } catch (err) {
-      console.error("Socket auth failed:", err.message);
       next(new Error("Unauthorized"));
     }
   });
 
-  // 2) Main socket connection
   io.on("connection", (socket) => {
     const user = socket.user;
-    console.log(`✅ Socket connected: ${user.fullname} (${socket.id})`);
+    const displayName = user.fullname || user.username;
+    const allowSend = makeLimiter(20, 10_000);
+    const accessCache = new Map(); // room -> { ok, at }
 
+    socket.join(userRoom(user._id));
 
-    // Company-wide general room: "company:<companyId>"
-    socket.on("joinCompanyRoom", (companyId) => {
+    // fresh DB check (cached briefly). Leaves the room and tells the client if access is gone.
+    const ensureAccess = async (room) => {
+      const hit = accessCache.get(room);
+      if (hit && Date.now() - hit.at < ACCESS_TTL_MS) return hit.ok;
+
+      const me = await User.findById(user._id).select("_id companyId");
+      const access = me ? await getRoomAccess(me, room) : null;
+      const ok = !!access && access.canRead && !access.notFound;
+
+      accessCache.set(room, { ok, at: Date.now() });
+      if (!ok) {
+        socket.leave(room);
+        socket.emit("roomRevoked", room);
+      }
+      return ok;
+    };
+
+    // re-reads the user so joining a company AFTER connecting still works
+    const joinIfAllowed = async (rawId, roomFor, deniedMsg, failMsg) => {
       try {
-        if (!companyId) return socket.emit("error", "companyId required");
-        if (!user.companyId || user.companyId.toString() !== companyId) {
-          return socket.emit(
-            "error",
-            "Unauthorized: not a member of this company"
-          );
-        }
-        const room = `company:${companyId}`;
+        const id = String(rawId ?? "");
+        if (!OID_RE.test(id)) return socket.emit("error", "valid id required");
+
+        const me = await User.findById(user._id).select("_id companyId");
+        if (!me) return socket.emit("error", "User not found");
+
+        const room = roomFor(id);
+        const access = await getRoomAccess(me, room);
+        if (access.notFound) return socket.emit("error", "Room not found");
+        if (!access.canRead) return socket.emit("error", deniedMsg);
+
+        accessCache.set(room, { ok: true, at: Date.now() });
         socket.join(room);
         socket.emit("joinedRoom", room);
-      } catch (e) {
-        socket.emit("error", "Failed to join company room");
+      } catch {
+        socket.emit("error", failMsg);
       }
-    });
+    };
 
-    // Project room: "project:<projectId>" (must be a ProjectMember)
-    socket.on("joinProjectRoom", async (projectId) => {
+    socket.on("joinCompanyRoom", (id) =>
+      joinIfAllowed(id, companyRoomId, "Unauthorized: not a member of this company", "Failed to join company room")
+    );
+    socket.on("joinProjectRoom", (id) =>
+      joinIfAllowed(id, (x) => String(x), "Unauthorized: not a member of this project", "Failed to join project room")
+    );
+    socket.on("joinManagementRoom", (id) =>
+      joinIfAllowed(id, managementRoomId, "Unauthorized: managers/admins only", "Failed to join management room")
+    );
+
+    socket.on("sendMessage", async (payload) => {
       try {
-        if (!projectId) return socket.emit("error", "projectId required");
-
-        const membership = await ProjectMember.findOne({
-          projectId,
-          userId: user._id,
-        }).select("_id role companyId");
-
-        if (!membership) {
-          return socket.emit(
-            "error",
-            "Unauthorized: not a member of this project"
-          );
-        }
-
-        const room = `project:${projectId}`;
-        socket.join(room);
-        socket.emit("joinedRoom", room);
-      } catch (e) {
-        socket.emit("error", "Failed to join project room");
-      }
-    });
-
-    // Management-only room (admin/manager): "company:<companyId>:management"
-    socket.on("joinManagementRoom", async (companyId) => {
-      try {
-        if (!companyId) return socket.emit("error", "companyId required");
-
-        // Any project membership within the company counts, but role must be admin/manager
-        const membership = await ProjectMember.findOne({
-          companyId,
-          userId: user._id,
-          role: { $in: ["admin", "manager"] },
-        }).select("_id");
-
-        if (!membership) {
-          return socket.emit(
-            "error",
-            "Unauthorized: only managers/admins can join management room"
-          );
-        }
-
-        const room = `company:${companyId}:management`;
-        socket.join(room);
-        socket.emit("joinedRoom", room);
-      } catch (e) {
-        socket.emit("error", "Failed to join management room");
-      }
-    });
-
-    
-    socket.on("sendMessage", async ({ room, message }) => {
-      try {
-        if (!room || !message?.trim()) return;
-
-        const joined = socket.rooms.has(room);
-        if (!joined) return socket.emit("error", "Join the room before sending");
+        const { room, message } = payload ?? {};
+        if (typeof room !== "string" || typeof message !== "string") return;
+        if (parseRoomId(room).type === "invalid") return;
+        const text = message.trim();
+        if (!text || text.length > 2000) return;
+        if (!socket.rooms.has(room)) return socket.emit("error", "Join the room before sending");
+        if (!allowSend()) return socket.emit("error", "You are sending messages too fast");
+        if (!(await ensureAccess(room))) return;
 
         const saved = await Chat.create({
           room,
           sender: user._id,
-          senderName: user.fullname,
-          message: message.trim(),
+          senderName: displayName,
+          message: text,
         });
 
         io.to(room).emit("receiveMessage", {
@@ -151,18 +179,25 @@ export const initSocket = (httpServer) => {
       }
     });
 
-    
-    socket.on("shareFile", async ({ room, fileUrl }) => {
+    socket.on("shareFile", async (payload) => {
       try {
-        if (!room || !fileUrl) return;
+        const { room, fileUrl } = payload ?? {};
+        if (typeof room !== "string" || typeof fileUrl !== "string") return;
+        if (parseRoomId(room).type === "invalid") return;
+        if (!socket.rooms.has(room)) return socket.emit("error", "Join the room before sending");
+        if (!allowSend()) return socket.emit("error", "You are sending messages too fast");
+        if (!(await ensureAccess(room))) return;
 
-        const joined = socket.rooms.has(room);
-        if (!joined) return socket.emit("error", "Join the room before sending");
+        // the file must sit in THIS user's own chat upload folder
+        const me = await User.findById(user._id).select("_id companyId");
+        if (!me || !isOwnedChatUpload(fileUrl, me)) {
+          return socket.emit("error", "Invalid file URL");
+        }
 
         const saved = await Chat.create({
           room,
           sender: user._id,
-          senderName: user.fullname,
+          senderName: displayName,
           fileUrl,
         });
 
@@ -180,21 +215,21 @@ export const initSocket = (httpServer) => {
       }
     });
 
-    socket.on("typing", ({ room, isTyping }) => {
-      if (!room) return;
-      socket.broadcast.to(room).emit("typing", {
-        userId: user._id,
-        userName: user.fullname,
-        isTyping: !!isTyping,
-      });
-    });
-
-    socket.on("disconnect", () => {
-      console.log(`❌ Socket disconnected: ${user.fullname} (${socket.id})`);
+    socket.on("typing", async (payload) => {
+      try {
+        const { room, isTyping } = payload ?? {};
+        if (typeof room !== "string" || !socket.rooms.has(room)) return;
+        if (!(await ensureAccess(room))) return;
+        socket.broadcast.to(room).emit("typing", {
+          userId: user._id,
+          userName: displayName,
+          isTyping: !!isTyping,
+        });
+      } catch {
+        /* ignore */
+      }
     });
   });
 
   return io;
 };
-
-

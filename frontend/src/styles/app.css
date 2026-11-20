@@ -1,0 +1,272 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================================
+   Palette 2: Deep Teal + Soft Green
+   Enterprise SaaS Design Tokens
+   ========================================= */
+
+:root {
+  /* ===============================
+     BRAND / ACTION COLORS
+     =============================== */
+
+  /* Primary actions (main CTAs, active nav, headers) */
+  --color-brand-primary: 31 111 107;      /* Deep Teal */
+
+  /* Secondary actions (links, hover, focus states) */
+  --color-brand-secondary: 63 169 156;    /* Soft Green-Teal */
+
+  /* Accent / Success highlights */
+  --color-brand-accent: 121 215 190;      /* Mint (#79D7BE) */
+
+  /* Accent surfaces (chips, soft highlights) */
+  --color-accent-muted: 209 250 229; /* old #D1FAE5 */
+
+
+  /* ===============================
+     BACKGROUND & SURFACES
+     =============================== */
+
+  /* App/page background */
+  --color-background-app: 244 246 245;
+
+  /* Subtle background sections */
+  --color-background-subtle: 238 242 240;
+
+  /* Base surface (cards, panels) */
+  --color-surface-base: 255 255 255;
+
+  /* Elevated surfaces (modals, popovers) */
+  --color-surface-elevated: 255 255 255;
+
+
+  /* ===============================
+     TEXT COLORS
+     =============================== */
+
+  /* Primary text (headings, main content) */
+  --color-text-primary: 28 43 42;
+
+  /* Secondary text (labels, descriptions) */
+  --color-text-secondary: 102 117 116;
+
+  /* Muted / disabled text */
+  --color-text-muted: 148 163 160;
+
+  /* Text on dark/primary surfaces */
+  --color-text-inverse: 255 255 255;
+
+
+  /* ===============================
+     BORDER & OUTLINE COLORS
+     =============================== */
+
+  /* Default borders (cards, dividers) */
+  --color-border-default: 102 117 116;
+
+  /* Subtle separators */
+  --color-border-subtle:  102 117 116;
+
+  /* Focus outlines (inputs, active elements) */
+  --color-border-focus: 63 169 156;
+
+
+  /* ===============================
+     STATUS COLORS
+     =============================== */
+
+  /* Success states */
+  --color-status-success: 121 215 190;
+
+  /* Info states */
+  --color-status-info: 63 169 156;
+
+  /* Warning states */
+  --color-status-warning: 245 158 11;
+
+  /* Error states */
+  --color-status-error: 220 38 38;
+}
+
+
+
+
+
+/* /* ===============================
+   GLOBAL BASE
+================================ */
+@layer base {
+  html {
+    font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+      "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+    background-color: rgb(var(--color-background-app));
+    color: rgb(var(--color-text-primary));
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+  }
+}
+
+/* ===============================
+   FORM SYSTEM
+================================ */
+@layer components {
+  .input {
+    @apply w-full h-11 px-4 rounded-lg
+      bg-[rgb(var(--color-surface-base))]
+      border border-[rgb(var(--color-border-focus)/0.4)]
+      text-[rgb(var(--color-text-primary))]
+      text-sm
+      transition
+      focus:outline-none
+      focus:ring-1
+      focus:ring-[rgb(var(--color-brand-primary))];
+  }
+
+  .textarea {
+    @apply w-full h-28 px-4 py-3 rounded-xl
+      bg-[rgb(var(--color-surface-base))]
+      border border-[rgb(var(--color-border-focus)/0.4)]
+      text-[rgb(var(--color-text-primary))]
+      text-sm
+      resize-none
+      transition
+      focus:outline-none
+      focus:ring-1
+      focus:ring-[rgb(var(--color-brand-primary))];
+  }
+
+  .label {
+    @apply block text-sm font-medium
+      text-[rgb(var(--color-text-primary))]
+      mb-1;
+  }
+
+  .error {
+    @apply text-xs
+      text-[rgb(var(--color-text-secondary))]
+      mt-1;
+  }
+}
+
+/* ===============================
+   BUTTON SYSTEM
+================================ */
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center
+      h-11 px-5 rounded-lg
+      bg-[rgb(var(--color-brand-primary))]
+      text-[rgb(var(--color-text-inverse))]
+      text-sm font-medium
+      transition
+      hover:opacity-90
+      focus:outline-none
+      focus:ring-2
+      focus:ring-[rgb(var(--color-brand-secondary))];
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center
+      h-11 px-5 rounded-lg
+      bg-[rgb(var(--color-brand-secondary)/0.1)]
+      text-[rgb(var(--color-brand-primary))]
+      text-sm font-medium
+      transition
+      hover:bg-[rgb(var(--color-brand-secondary)/0.2)]
+      focus:outline-none
+      focus:ring-2
+      focus:ring-[rgb(var(--color-brand-secondary))];
+  }
+
+  .btn-disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+}
+
+/* ===============================
+   CARD SYSTEM
+================================ */
+@layer components {
+  .card {
+    @apply bg-[rgb(var(--color-surface-base))]
+      rounded-xl
+      shadow-sm
+      p-4;
+  }
+
+  .card-title {
+    @apply text-sm font-medium
+      text-[rgb(var(--color-text-secondary))];
+  }
+
+  .card-value {
+    @apply text-2xl font-semibold
+      text-[rgb(var(--color-text-primary))]
+      mt-1;
+  }
+}
+
+/* ===============================
+   BADGES & TAGS
+================================ */
+@layer components {
+  .badge {
+    @apply inline-flex items-center px-3 py-1
+      rounded-full
+      text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply bg-[rgb(var(--color-status-success)/0.2)]
+      text-[rgb(var(--color-text-primary))];
+  }
+
+  .badge-muted {
+    @apply bg-[rgb(var(--color-background-app))]
+      text-[rgb(var(--color-text-secondary))];
+  }
+}
+
+
+/* ===============================
+   LAYOUT HELPERS
+================================ */
+@layer utilities {
+  .section {
+    @apply mb-6;
+  }
+
+  .grid-cards {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4;
+  }
+}
+/* ===============================
+   ANIMATIONS
+================================ */
+@keyframes slideDown {
+  from {
+    transform: translateY(-80px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-80px);
+    opacity: 0;
+  }
+}

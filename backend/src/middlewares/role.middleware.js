@@ -1,12 +1,16 @@
 import { ProjectMember } from "../models/projectMember.model.js";
 import { ApiError } from "../utils/apiError.js";
 
+/**
+ * Check if the user has one of the allowed roles within a given project.
+ * Must be used on routes that have :projectId in params or body.
+ */
 const authorizeProjectRoles = (...allowedRoles) => {
   return async (req, res, next) => {
     try {
       const user = req.user;
       const projectId =
-        req.params.projectId || req.body.projectId || req.query.projectId;
+        req.params.projectId || req.body?.projectId || req.query.projectId;
 
       if (!user || !projectId) {
         throw new ApiError(400, "User or projectId missing in request");

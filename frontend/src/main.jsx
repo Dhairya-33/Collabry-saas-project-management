@@ -1,10 +1,26 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.jsx'
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import { Provider } from "react-redux";
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+import App from "./App";
+import store from "./store/store.js";
+import { clearUser } from "./store/authSlice";
+import { setAuthFailureHandler } from "./lib/axios";
+import { initSocketLifecycle } from "./lib/socket";
+
+import "./styles/app.css";
+
+// when a token refresh is rejected, drop the user so route guards send them to /auth
+setAuthFailureHandler(() => store.dispatch(clearUser()));
+initSocketLifecycle(store);
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <Provider store={store}>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </Provider>
+  </React.StrictMode>
+);

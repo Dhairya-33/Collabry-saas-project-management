@@ -1,13 +1,16 @@
-import React from 'react'
+import AuthInitializer from "@/app/AuthInitialiser";
+import AppRoutes from "@/app/AppRoutes";
+import { MotionConfig } from "framer-motion";
 
-function App() {
 
+export default function App() {
   return (
     <>
-      <div 
-      className='bg-red-400 text-white text-center'>check tailwind css</div>
+      <AuthInitializer>
+        <MotionConfig reducedMotion="user">
+          <AppRoutes />
+        </MotionConfig>
+      </AuthInitializer>
     </>
-  )
+  );
 }
-
-export default App

@@ -7,7 +7,7 @@ import { Task } from "../models/task.model.js";
 
 
 const assignTask = asyncHandler(async (req, res) => {
-  const { taskName, description, empId, projectId, dueDate } = req.body;
+  const { taskName, description, empId, projectId, dueDate } = req.body ?? {};
 
   if (!taskName || !empId || !projectId) {
     throw new ApiError(400, "taskName, empId, and projectId are required");
@@ -19,9 +19,13 @@ const assignTask = asyncHandler(async (req, res) => {
   ) {
     throw new ApiError(400, "Invalid projectId or empId");
   }
-  
-  const projectExists = await Project.exists({ _id: projectId });
-  if (!projectExists) throw new ApiError(404, "Project not found");
+
+  const project = await Project.findById(projectId).select("companyId");
+  if (!project) throw new ApiError(404, "Project not found");
+
+  if (project.companyId.toString() !== req.user.companyId?.toString()) {
+    throw new ApiError(403, "Unauthorized access to this project");
+  }
 
   const managerId = req.user._id;
 
@@ -32,7 +36,7 @@ const assignTask = asyncHandler(async (req, res) => {
   });
 
   if (!person) {
-    throw new ApiError(403, "You are not authorized to assign tasks in this project");
+    throw new ApiError(403, "Not authorized to assign tasks");
   }
 
   const employee = await ProjectMember.findOne({
@@ -40,12 +44,12 @@ const assignTask = asyncHandler(async (req, res) => {
     userId: empId,
     role: "employee",
   });
+
   if (!employee) {
-    throw new ApiError(404, "Employee not found in this project");
+    throw new ApiError(404, "Employee not in this project");
   }
 
-  const fileUrl = req.file ? req.file.path : undefined;
-
+  const fileUrl = req.file?.path;
 
   const task = await Task.create({
     taskName: taskName.trim(),
@@ -54,30 +58,21 @@ const assignTask = asyncHandler(async (req, res) => {
     assignedBy: managerId,
     dueDate,
     projectId,
+    companyId: project.companyId,
     status: "pending",
     fileUrl,
   });
 
-  if (!task) {
-    throw new ApiError(500, "Task creation failed, please try again");
-  }
-
   res.status(201).json({
     status: "success",
     message: "Task assigned successfully",
-    data: {
-      taskId: task._id,
-      taskName: task.taskName,
-      assignedTo: task.assignedTo,
-      dueDate: task.dueDate,
-      status: task.status,
-    },
+    data: task,
   });
 });
 
 const editTask = asyncHandler(async (req, res) => {
   const { taskId } = req.params;
-  const { taskName, description, dueDate, status, assignedTo } = req.body;
+  const { taskName, description, dueDate, status, assignedTo } = req.body ?? {};
   const userId = req.user._id;
 
   if (!mongoose.isValidObjectId(taskId)) {
@@ -113,7 +108,10 @@ const editTask = asyncHandler(async (req, res) => {
 
   if (taskName?.trim()) task.taskName = taskName.trim();
   if (description?.trim()) task.description = description.trim();
-  if (dueDate) task.dueDate = dueDate;
+  if (dueDate) {
+    task.dueDate = dueDate;
+    if (task.status === "overdue" && new Date(dueDate) > new Date()) task.status = "pending";
+  }
 
   if (status) {
     const validStatuses = ["pending", "in-progress", "completed"];
@@ -209,7 +207,7 @@ const myTasks = asyncHandler(async (req, res) => {
     }
 
     const tasks = await Task.aggregate([  
-    { $match: { assignedTo: mongoose.Types.ObjectId(userId), projectId: mongoose.Types.ObjectId(projectId) } },
+    { $match: { assignedTo: new mongoose.Types.ObjectId(userId), projectId: new mongoose.Types.ObjectId(projectId) } },
     
     { $addFields: {
         statusOrder: {
@@ -280,7 +278,7 @@ const managerTasks = asyncHandler(async (req,res) => {
     return res.status(200).json({
       status: "success",
       message: "No tasks found for this project",
-      data: [],
+      data: { tasks: [] },
     });
   }
 
@@ -291,10 +289,10 @@ const managerTasks = asyncHandler(async (req,res) => {
     "completed": 3,
   };
 
-  // Sort tasks → employee name → status → due date
+  // Sort tasks -> employee name -> status -> due date
   tasks.sort((a, b) => {
-    const nameA = a.assignedTo.fullname.toLowerCase();
-    const nameB = b.assignedTo.fullname.toLowerCase();
+    const nameA = (a.assignedTo?.fullname || a.assignedTo?.username || "").toLowerCase();
+    const nameB = (b.assignedTo?.fullname || b.assignedTo?.username || "").toLowerCase();
     if (nameA < nameB) return -1;
     if (nameA > nameB) return 1;
 
@@ -326,7 +324,7 @@ const managerTasks = asyncHandler(async (req,res) => {
     return acc;
   }, {});
 
-  // Convert grouped object → array for frontend
+  // Convert grouped object -> array for frontend
   const result = Object.values(grouped);
 
 
@@ -337,11 +335,10 @@ const managerTasks = asyncHandler(async (req,res) => {
   });
 })
 
-
 const respondToTask = asyncHandler(async (req, res) => {
   const user = req.user;
   const { taskId } = req.params;
-  const { status } = req.body;
+  const { status } = req.body ?? {};
 
   if (!isValidObjectId(taskId)) {
     throw new ApiError(400, "Invalid taskId");
@@ -406,6 +403,9 @@ const getSingleTask = asyncHandler(async (req, res) => {
     .populate("assignedBy", "fullname email");
 
   if (!task) throw new ApiError(404, "Task not found");
+
+  const member = await ProjectMember.findOne({ projectId: task.projectId, userId: req.user._id });
+  if (!member) throw new ApiError(403, "Not a member of this project");
 
   res.status(200).json({ status: "success", data: task });
 });

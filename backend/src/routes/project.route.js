@@ -11,33 +11,31 @@ import {
   getArchiveProjects,
   archiveProject,
   getProjectEmployees,
-  reassignProjectManager
+  getProjectById,
+  getMyProjectInvites
 } from "../controllers/project.controller.js";
-
-import  verifyJWT  from "../middlewares/jwt.middleware.js";
-import  authorizeRoles  from "../middlewares/role.middleware.js";
+import verifyJWT from "../middlewares/jwt.middleware.js";
 
 const router = express.Router();
-
 router.use(verifyJWT);
 
-router.post("/create", authorizeRoles("admin"), createProject);
-router.get("/all", authorizeRoles("admin"), getallProjects);
-router.post("/archive", authorizeRoles("admin"), archiveProject);
-router.get("/archived", authorizeRoles("admin"), getArchiveProjects);
+router.post("/create", createProject);
+router.get("/all", getallProjects);
+router.post("/archive", archiveProject);
+router.get("/archived", getArchiveProjects);
 
-router.post("/member/add", authorizeRoles("manager", "admin"), addEmployee);
-router.delete("/member/remove", authorizeRoles("manager", "admin"), removeEmployee);
-router.post("/employees", authorizeRoles("manager", "admin"), getProjectEmployees);
+router.post("/member/add", addEmployee);
+router.delete("/member/remove", removeEmployee);
+router.post("/employees", getProjectEmployees);
 
-router.post("/invite", authorizeRoles("manager", "admin"), createProjectInvite);
+router.post("/invite", createProjectInvite);
+router.post("/invite/respond", joinProject);
+router.get("/invite/my", getMyProjectInvites);
 
-router.post("/invite/respond", authorizeRoles("employee"), joinProject);
+router.get("/my/employee", getemployeeProjects);
+router.get("/my/manager", getManagerProjects);
 
-router.get("/my/employee", authorizeRoles("employee"), getemployeeProjects);
-router.get("/my/manager", authorizeRoles("manager"), getManagerProjects);
-
-router.post("/manager/reassign", authorizeRoles("admin"), reassignProjectManager);
-
+// keep this LAST so it does not shadow /all, /archived, /my/*
+router.get("/:projectId", getProjectById);
 
 export default router;
